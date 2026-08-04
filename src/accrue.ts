@@ -1,0 +1,262 @@
+/**
+ * Stage 2: the accrual engine. Reads the raw tables, builds piecewise-
+ * constant segments, computes revenue/cost per segment, writes
+ * accrual_segments + pnl_daily, and records the run in ops_runs.
+ *
+ * All conventions documented in ASSUMPTIONS.md. Highlights:
+ *  - Revenue = liquidityIndex ratio growth on the scaled position (ground
+ *    truth); liquidityRate integration is only a diagnostic cross-check in
+ *    reconcile.ts.
+ *  - Cost rate = rpow-annualized SSR + linear spread from
+ *    strategy_cost_terms (the +20bps is data, not code), applied to
+ *    position × utilization. ASSUMPTION: linear annual spread — the brief
+ *    does not specify the compounding convention.
+ *  - Segments are [start, end); boundary values are the latest at or before
+ *    the segment start. Utilization = snapshot at segment start.
+ *  - Derived tables are deleted and rebuilt in one transaction per run:
+ *    segments are derived data, idempotent by reconstruction.
+ */
+
+import type pg from "pg";
+import { createPool } from "./lib/db.js";
+import { makeClient } from "./lib/client.js";
+import { rpow, RAY } from "./lib/rpow.js";
+
+const YEAR = 31_536_000n;
+const WAD = 10n ** 18n;
+
+interface Boundary {
+  ts: number; // unix seconds
+  block: bigint;
+}
+
+interface Row {
+  [k: string]: string;
+}
+
+/** Latest element of `xs` (sorted by ts asc) with ts <= t; error if none. */
+function latestAtOrBefore<T extends { ts: number }>(xs: T[], t: number, what: string): T {
+  let lo = 0, hi = xs.length - 1, ans = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (xs[mid]!.ts <= t) { ans = mid; lo = mid + 1; } else { hi = mid - 1; }
+  }
+  if (ans === -1) throw new Error(`No ${what} at or before t=${t}`);
+  return xs[ans]!;
+}
+
+async function main(): Promise<void> {
+  const pool = createPool();
+  const client = makeClient();
+
+  const strategy = await pool.query(`SELECT id FROM strategies WHERE name = 'sparklend-usds'`);
+  const strategyId = (strategy.rows[0] as { id: number }).id;
+
+  // Pin to the minimum watermark: every stream is complete up to this block.
+  const wm = await pool.query(
+    `SELECT min(highest_indexed_block)::text AS b FROM sync_watermarks
+     WHERE source IN ('ssr','reserve','position','transfers','snapshots')`,
+  );
+  const pinnedBlock = BigInt((wm.rows[0] as Row).b!);
+  const pinnedHash = (await client.getBlock({ blockNumber: pinnedBlock })).hash;
+
+  // ── Load raw streams (timestamps from the blocks table) ─────────────────
+  const q = (sql: string) => pool.query(sql).then((r) => r.rows as Row[]);
+
+  const positions = await q(`
+    SELECT p.block_number::text AS block, extract(epoch FROM b.block_timestamp)::bigint::text AS ts,
+           p.kind, p.amount::text AS amount, p.liquidity_index_at::text AS idx
+    FROM position_events p JOIN blocks b USING (block_number)
+    WHERE p.strategy_id = ${strategyId} ORDER BY p.block_number, p.log_index`);
+  if (positions.length === 0) throw new Error("No position events indexed; nothing to accrue.");
+
+  const ssrRows = (await q(`
+    SELECT s.block_number::text AS block, extract(epoch FROM b.block_timestamp)::bigint::text AS ts,
+           s.ssr::text AS ssr
+    FROM ssr_changes s JOIN blocks b USING (block_number) ORDER BY s.block_number, s.log_index`))
+    .map((r) => ({ ts: Number(r.ts), block: BigInt(r.block!), ssr: BigInt(r.ssr!) }));
+
+  // Last update per block (log_index order) is the block's closing state.
+  const reserveRows = (await q(`
+    SELECT DISTINCT ON (r.block_number)
+           r.block_number::text AS block, extract(epoch FROM b.block_timestamp)::bigint::text AS ts,
+           r.liquidity_rate::text AS rate, r.liquidity_index::text AS idx
+    FROM reserve_updates r JOIN blocks b USING (block_number)
+    ORDER BY r.block_number, r.log_index DESC`))
+    .map((r) => ({ ts: Number(r.ts), block: BigInt(r.block!), rate: BigInt(r.rate!), idx: BigInt(r.idx!) }));
+
+  const snapRows = (await q(`
+    SELECT s.block_number::text AS block, extract(epoch FROM b.block_timestamp)::bigint::text AS ts,
+           s.atoken_total_supply::text AS supply, s.variable_debt_total_supply::text AS debt
+    FROM reserve_snapshots s JOIN blocks b USING (block_number) ORDER BY s.block_number`))
+    .map((r) => ({ ts: Number(r.ts), block: BigInt(r.block!), supply: BigInt(r.supply!), debt: BigInt(r.debt!) }));
+
+  const terms = (await q(`
+    SELECT extract(epoch FROM effective_from)::bigint::text AS ts, spread_bps::text AS bps
+    FROM strategy_cost_terms WHERE strategy_id = ${strategyId} ORDER BY effective_from`))
+    .map((r) => ({ ts: Number(r.ts), spreadBps: Number(r.bps) }));
+
+  const posEvents = positions.map((r) => ({
+    ts: Number(r.ts), block: BigInt(r.block!),
+    signedAmount: r.kind === "supply" ? BigInt(r.amount!) : -BigInt(r.amount!),
+    idx: BigInt(r.idx!),
+  }));
+
+  // ── Boundaries: union of event timestamps in [first position, pinned] ───
+  const tStart = posEvents[0]!.ts;
+  const pinnedTs = Number(
+    (await pool.query(`SELECT extract(epoch FROM block_timestamp)::bigint::text AS ts FROM blocks WHERE block_number = $1`,
+      [pinnedBlock.toString()])).rows.length
+      ? ((await pool.query(`SELECT extract(epoch FROM block_timestamp)::bigint::text AS ts FROM blocks WHERE block_number = $1`,
+          [pinnedBlock.toString()])).rows[0] as Row).ts
+      : (await client.getBlock({ blockNumber: pinnedBlock })).timestamp,
+  );
+
+  const byTs = new Map<number, Boundary>();
+  for (const e of [...ssrRows, ...reserveRows, ...posEvents]) {
+    if (e.ts >= tStart && e.ts < pinnedTs) {
+      const prev = byTs.get(e.ts);
+      if (!prev || e.block > prev.block) byTs.set(e.ts, { ts: e.ts, block: e.block });
+    }
+  }
+  byTs.set(pinnedTs, { ts: pinnedTs, block: pinnedBlock });
+  const boundaries = [...byTs.values()].sort((a, b) => a.ts - b.ts);
+
+  // Scaled position S at each boundary: S = Σ ± amount×RAY/idx over events ≤ t.
+  // (aToken scaledBalance semantics; check #2 asserts S×index == balanceOf.)
+  const scaledAt = (t: number): bigint => {
+    let s = 0n;
+    for (const e of posEvents) {
+      if (e.ts > t) break;
+      s += (e.signedAmount * RAY) / e.idx;
+    }
+    return s;
+  };
+
+  // ── Segments ─────────────────────────────────────────────────────────────
+  interface Segment {
+    tStart: number; tEnd: number; blockStart: bigint; blockEnd: bigint;
+    position: bigint; ssr: bigint; rate: bigint; utilNum: bigint; utilDen: bigint;
+    revenue: bigint; cost: bigint;
+  }
+  const segments: Segment[] = [];
+  // Annualized SSR is expensive-ish (rpow); cache per distinct ssr value.
+  const annualCache = new Map<bigint, bigint>();
+  const annualized = (ssr: bigint): bigint => {
+    let a = annualCache.get(ssr);
+    if (a === undefined) { a = rpow(ssr, YEAR) - RAY; annualCache.set(ssr, a); }
+    return a;
+  };
+
+  for (let i = 0; i < boundaries.length - 1; i++) {
+    const b0 = boundaries[i]!, b1 = boundaries[i + 1]!;
+    const dt = BigInt(b1.ts - b0.ts);
+    const S = scaledAt(b0.ts);
+    const res0 = latestAtOrBefore(reserveRows, b0.ts, "reserve update");
+    const res1 = latestAtOrBefore(reserveRows, b1.ts, "reserve update");
+    const snap = latestAtOrBefore(snapRows, b0.ts, "reserve snapshot");
+    const ssr = latestAtOrBefore(ssrRows, b0.ts, "ssr change").ssr;
+    const term = [...terms].reverse().find((x) => x.ts <= b0.ts);
+    if (!term) throw new Error(`No cost term effective at t=${b0.ts}`);
+
+    const position = (S * res0.idx) / RAY;
+    // Revenue: scaled balance × index growth across the segment.
+    const revenue = (S * (res1.idx - res0.idx)) / RAY;
+    // Cost: position × (annualized SSR + spread) × dt/YEAR × utilization.
+    // spread_bps in ray: 1bp = 1e-4 → ×1e23. All-bigint, single floor at end.
+    const spreadRay = BigInt(Math.round(term.spreadBps * 1e4)) * 10n ** 19n;
+    const costRate = annualized(ssr) + spreadRay;
+    const cost = (position * costRate * dt * snap.debt) / (YEAR * RAY * snap.supply);
+
+    segments.push({
+      tStart: b0.ts, tEnd: b1.ts, blockStart: b0.block, blockEnd: b1.block,
+      position, ssr, rate: res0.rate, utilNum: snap.debt, utilDen: snap.supply,
+      revenue, cost,
+    });
+  }
+
+  // ── Daily rollup: pro-rate each segment across UTC day boundaries ───────
+  // Consistent with piecewise-constant rates: within a segment, accrual is
+  // linear in time, so second-weighted allocation is exact under the model.
+  interface Daily { revenue: bigint; cost: bigint; positionEod: bigint; utilSec: number; sec: number }
+  const days = new Map<string, Daily>();
+  const dayOf = (t: number) => new Date(t * 1000).toISOString().slice(0, 10);
+  for (const seg of segments) {
+    let t = seg.tStart;
+    const util = Number(seg.utilNum) / Number(seg.utilDen);
+    while (t < seg.tEnd) {
+      const nextMidnight = (Math.floor(t / 86_400) + 1) * 86_400;
+      const sliceEnd = Math.min(nextMidnight, seg.tEnd);
+      const frac = { num: BigInt(sliceEnd - t), den: BigInt(seg.tEnd - seg.tStart) };
+      const key = dayOf(t);
+      const d = days.get(key) ?? { revenue: 0n, cost: 0n, positionEod: 0n, utilSec: 0, sec: 0 };
+      d.revenue += (seg.revenue * frac.num) / frac.den;
+      d.cost += (seg.cost * frac.num) / frac.den;
+      d.positionEod = seg.position;
+      d.utilSec += util * (sliceEnd - t);
+      d.sec += sliceEnd - t;
+      days.set(key, d);
+      t = sliceEnd;
+    }
+  }
+
+  // ── Persist: rebuild derived tables + record the run, one transaction ───
+  const pg_ = await pool.connect();
+  try {
+    await pg_.query("BEGIN");
+    await pg_.query(`DELETE FROM accrual_segments WHERE strategy_id = $1`, [strategyId]);
+    await pg_.query(`DELETE FROM pnl_daily WHERE strategy_id = $1`, [strategyId]);
+
+    for (const s of segments) {
+      const util = (s.utilNum * WAD) / s.utilDen; // 18-dp fixed point
+      await pg_.query(
+        `INSERT INTO accrual_segments (strategy_id, t_start, t_end, block_start, block_end,
+           position, ssr, liquidity_rate, utilization, revenue, cost)
+         VALUES ($1, to_timestamp($2), to_timestamp($3), $4, $5, $6, $7, $8, $9::numeric / 1e18, $10, $11)`,
+        [strategyId, s.tStart, s.tEnd, s.blockStart.toString(), s.blockEnd.toString(),
+         s.position.toString(), s.ssr.toString(), s.rate.toString(), util.toString(),
+         s.revenue.toString(), s.cost.toString()],
+      );
+    }
+    for (const [day, d] of [...days.entries()].sort()) {
+      const net = d.revenue - d.cost;
+      // Annualized margin on position, in bps: net/position × YEAR/covered × 1e4.
+      // Small magnitudes — float is fine for a display metric.
+      const marginBps = d.positionEod > 0n && d.sec > 0
+        ? (Number(net) / Number(d.positionEod)) * (Number(YEAR) / d.sec) * 1e4
+        : 0;
+      await pg_.query(
+        `INSERT INTO pnl_daily (strategy_id, day, revenue, cost, net, margin_bps, position_eod, utilization_avg)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [strategyId, day, d.revenue.toString(), d.cost.toString(), net.toString(),
+         marginBps.toFixed(6), d.positionEod.toString(), (d.utilSec / d.sec).toFixed(18)],
+      );
+    }
+    const run = await pg_.query(
+      `INSERT INTO ops_runs (kind, pinned_block, pinned_block_hash) VALUES ('accrual', $1, $2)
+       RETURNING run_id, computed_at`,
+      [pinnedBlock.toString(), pinnedHash],
+    );
+    await pg_.query("COMMIT");
+    const r = run.rows[0] as { run_id: string; computed_at: Date };
+
+    const totRev = segments.reduce((a, s) => a + s.revenue, 0n);
+    const totCost = segments.reduce((a, s) => a + s.cost, 0n);
+    console.log(`Accrual run ${r.run_id} pinned at block ${pinnedBlock} (${pinnedHash.slice(0, 10)}…)`);
+    console.log(`  segments: ${segments.length}, days: ${days.size}`);
+    console.log(`  revenue: ${totRev} wei (${Number(totRev) / 1e18} USDS)`);
+    console.log(`  cost:    ${totCost} wei (${Number(totCost) / 1e18} USDS)`);
+    console.log(`  net:     ${totRev - totCost} wei (${Number(totRev - totCost) / 1e18} USDS)`);
+  } catch (error) {
+    await pg_.query("ROLLBACK");
+    throw error;
+  } finally {
+    pg_.release();
+  }
+  await pool.end();
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
