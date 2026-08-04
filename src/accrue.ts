@@ -151,8 +151,18 @@ async function main(): Promise<void> {
   // ── Boundaries: union of event timestamps in [first position, pinned] ───
   const tStart = posEvents[0]!.ts;
 
+  // Cost-term effective_from timestamps are boundaries too: a renegotiated
+  // spread must start a new segment, not be smeared over an old one. Terms
+  // have no block of their own; carry the latest reserve block at/before.
+  const blockAtOrBefore = (t: number): bigint => {
+    let b = reserveRows[0]?.block ?? pinnedBlock;
+    for (const r of reserveRows) { if (r.ts <= t) b = r.block; else break; }
+    return b;
+  };
+  const termBoundaries = terms.map((x) => ({ ts: x.ts, block: blockAtOrBefore(x.ts) }));
+
   const byTs = new Map<number, Boundary>();
-  for (const e of [...ssrRows, ...reserveRows, ...posEvents]) {
+  for (const e of [...ssrRows, ...reserveRows, ...posEvents, ...termBoundaries]) {
     if (e.ts >= tStart && e.ts < pinnedTs) {
       const prev = byTs.get(e.ts);
       if (!prev || e.block > prev.block) byTs.set(e.ts, { ts: e.ts, block: e.block });
@@ -160,6 +170,27 @@ async function main(): Promise<void> {
   }
   byTs.set(pinnedTs, { ts: pinnedTs, block: pinnedBlock });
   const boundaries = [...byTs.values()].sort((a, b) => a.ts - b.ts);
+
+  /**
+   * liquidityIndex at an arbitrary boundary time: exact at reserve-update
+   * times; linearly interpolated in time inside the surrounding reserve
+   * interval otherwise (SSR changes, position events and cost-term starts
+   * rarely coincide with a reserve update). Interpolation cancels in the
+   * telescoping revenue sum — cumulative revenue is unchanged to the wei —
+   * it only moves attribution BETWEEN the two segments sharing the
+   * boundary. Documented in ASSUMPTIONS.md.
+   */
+  const idxAt = (t: number): bigint => {
+    let lo: typeof reserveRows[number] | null = null;
+    let hi: typeof reserveRows[number] | null = null;
+    for (const r of reserveRows) {
+      if (r.ts <= t) lo = r;
+      else { hi = r; break; }
+    }
+    if (lo === null) throw new Error(`No reserve index at or before t=${t}`);
+    if (lo.ts === t || hi === null) return lo.idx;
+    return lo.idx + ((hi.idx - lo.idx) * BigInt(t - lo.ts)) / BigInt(hi.ts - lo.ts);
+  };
 
   // Scaled position S at each boundary: S = Σ ± rayDiv(amount, idx) over
   // events ≤ t, with Aave's HALF-UP rounding (WadRayMath.rayDiv), not floor —
@@ -195,15 +226,16 @@ async function main(): Promise<void> {
     const dt = BigInt(b1.ts - b0.ts);
     const S = scaledAt(b0.ts);
     const res0 = latestAtOrBefore(reserveRows, b0.ts, "reserve update");
-    const res1 = latestAtOrBefore(reserveRows, b1.ts, "reserve update");
+    const idx0 = idxAt(b0.ts);
+    const idx1 = idxAt(b1.ts);
     const snap = latestAtOrBefore(snapRows, b0.ts, "reserve snapshot");
     const ssr = latestAtOrBefore(ssrRows, b0.ts, "ssr change").ssr;
     const term = [...terms].reverse().find((x) => x.ts <= b0.ts);
     if (!term) throw new Error(`No cost term effective at t=${b0.ts}`);
 
-    const position = (S * res0.idx) / RAY;
+    const position = (S * idx0) / RAY;
     // Revenue: scaled balance × index growth across the segment.
-    const revenue = (S * (res1.idx - res0.idx)) / RAY;
+    const revenue = (S * (idx1 - idx0)) / RAY;
     // Cost: position × (annualized SSR + spread) × dt/YEAR × utilization.
     // spread_bps in ray: 1bp = 1e-4 → ×1e23. All-bigint, single floor at end.
     const spreadRay = BigInt(Math.round(term.spreadBps * 1e4)) * 10n ** 19n;
@@ -220,7 +252,7 @@ async function main(): Promise<void> {
   // ── Daily rollup: pro-rate each segment across UTC day boundaries ───────
   // Consistent with piecewise-constant rates: within a segment, accrual is
   // linear in time, so second-weighted allocation is exact under the model.
-  interface Daily { revenue: bigint; cost: bigint; positionEod: bigint; utilSec: number; sec: number }
+  interface Daily { revenue: bigint; cost: bigint; positionEod: bigint; utilSec: number; sec: number; posDt: number }
   const days = new Map<string, Daily>();
   const dayOf = (t: number) => new Date(t * 1000).toISOString().slice(0, 10);
   for (const seg of segments) {
@@ -240,12 +272,13 @@ async function main(): Promise<void> {
       revAllocated += revSlice;
       costAllocated += costSlice;
       const key = dayOf(t);
-      const d = days.get(key) ?? { revenue: 0n, cost: 0n, positionEod: 0n, utilSec: 0, sec: 0 };
+      const d = days.get(key) ?? { revenue: 0n, cost: 0n, positionEod: 0n, utilSec: 0, sec: 0, posDt: 0 };
       d.revenue += revSlice;
       d.cost += costSlice;
       d.positionEod = seg.position;
       d.utilSec += util * (sliceEnd - t);
       d.sec += sliceEnd - t;
+      d.posDt += Number(seg.position) * (sliceEnd - t);
       days.set(key, d);
       t = sliceEnd;
     }
@@ -271,10 +304,13 @@ async function main(): Promise<void> {
     }
     for (const [day, d] of [...days.entries()].sort()) {
       const net = d.revenue - d.cost;
-      // Annualized margin on position, in bps: net/position × YEAR/covered × 1e4.
-      // Small magnitudes — float is fine for a display metric.
-      const marginBps = d.positionEod > 0n && d.sec > 0
-        ? (Number(net) / Number(d.positionEod)) * (Number(YEAR) / d.sec) * 1e4
+      // Exposure-weighted annualized margin, in bps:
+      //   net × YEAR × 1e4 / Σ(position × dt)
+      // — position-seconds, not end-of-day position, so partial exposure
+      // and mid-day position changes weight correctly. Float is fine for a
+      // display metric.
+      const marginBps = d.posDt > 0
+        ? (Number(net) * Number(YEAR) * 1e4) / d.posDt
         : 0;
       await pg_.query(
         `INSERT INTO pnl_daily (strategy_id, day, revenue, cost, net, margin_bps, position_eod, utilization_avg)

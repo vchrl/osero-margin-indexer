@@ -45,7 +45,15 @@ There is also an equivalence test: `npm run test:replay` rebuilds a scratch
 database from scratch — meaning from the deployment-scoped `START_BLOCK`
 (25,540,000, the spell day), the strategy's entire on-chain life — and
 asserts the derived tables are byte-identical to the incrementally-synced
-production database.
+production database. The scratch DB is dropped on success and kept for
+debugging on failure.
+
+And a corruption test: `npm run test:corruption` copies the database three
+times, mutates exactly one raw row in each copy (a snapshot's debt, the
+seed SSR, the cost-term spread), runs the gate against the corrupted copy
+and asserts it FAILS. A gate that never fails is indistinguishable from no
+gate; this proves each class of input corruption actually trips it (the
+pure-SQL cost recomputation, check 10, is the tripwire).
 
 ## Quickstart (clone to running)
 
@@ -98,8 +106,10 @@ archive endpoint (Alchemy/Infura/QuickNode/dRPC paid) via `RPC_URL=` in
   `DATABASE_URL=postgres://osero:osero@localhost:5432/osero_margin`.
 - `password authentication failed` → your `pg_hba.conf` requires a
   password; put it in `DATABASE_URL`.
-- The replay test creates and drops `<dbname>_replaytest` on the same
-  server, so its role needs `CREATEDB` rights.
+- The replay and corruption tests create scratch databases
+  (`<dbname>_replaytest`, `<dbname>_corruptionN`) on the same server, so
+  their role needs `CREATEDB` rights. Both drop their scratch DBs when they
+  pass; replay keeps its copy for debugging when it fails.
 
 ### Environment variables
 
@@ -145,11 +155,21 @@ only on the share of its deployed USDS actually borrowed** by SparkLend users:
 
 Three stages, three concerns: the indexer knows nothing about finance, the
 accrual engine knows nothing about RPC, the dashboard knows nothing about
-either — it refuses to render unless the gate passed. The schema is
-extensible by design: `strategies` + `strategy_cost_terms` make a second
-venue (or renegotiated terms) an INSERT, not a rewrite, and every raw-table
-natural key leads with `chain_id` (DEFAULT 1 = mainnet) so a second chain
-is additive data rather than a key migration under load.
+either — it refuses to render unless the gate passed.
+
+**Extensibility, stated precisely.** What is multi-strategy/multi-chain
+ready TODAY: the schema (`strategies` rows, `strategy_cost_terms` as
+time-versioned data, `strategy_id` on every derived row, `chain_id` leading
+every raw-table natural key with DEFAULT 1 = mainnet). What is NOT, and
+would be the actual work of adding a second venue or chain: the five stream
+definitions in `src/index.ts` are SparkLend/Sky-specific (addresses, topics,
+decode shapes), `src/addresses.ts` is a mainnet-only constant map, the ilk
+is a constant in `src/reconcile.ts`, several checks encode Aave/vat
+semantics, and the RPC client has no per-chain routing. A second venue is a
+new stream set + strategies row + venue-specific checks; a second chain
+additionally needs per-chain clients, finality rules and watermark scoping.
+The schema will take it without migration; the code will not without new
+adapters.
 
 ## Scaling judgment (what changes at 100×)
 

@@ -25,6 +25,14 @@
  *     rounding and intra-block timing; documented tolerance 0.5%.
  *  9. Three utilization definitions at the pin, recorded with deltas.
  *
+ * Blocking (independent recomputation):
+ * 10. Cumulative cost recomputed in PURE SQL from the raw tables
+ *     (reserve_snapshots, ssr_changes, strategy_cost_terms, position
+ *     history) with no accrual-engine code in the path — the anti-
+ *     corruption check the corruption test leans on. Annualization uses
+ *     float8 power() (~1e-15 relative); index at interpolated boundaries
+ *     is last-update-stale; both absorbed by the documented tolerance.
+ *
  * A required-check registry (src/lib/checks.ts) turns a missing check into
  * a blocking failure, and the latest results are exported as
  * dashboard/reconciliation.json.
@@ -40,7 +48,7 @@ import { padHex, toFunctionSelector, stringToHex } from "viem";
 import { createPool } from "./lib/db.js";
 import { makeClient, callUint } from "./lib/client.js";
 import { rpow, RAY } from "./lib/rpow.js";
-import { writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, readFileSync, mkdirSync } from "node:fs";
 import {
   ALM_PROXY, ALLOCATOR_BUFFER, ALLOCATOR_VAULT, MCD_VAT, SPARK_POOL,
   SP_USDS, SUSDS, USDS,
@@ -61,6 +69,35 @@ interface CheckResult {
 }
 
 function abs(x: bigint): bigint { return x < 0n ? -x : x; }
+
+/**
+ * Regenerates the reconciliation table in WRITEUP.md between the marker
+ * comments from the just-written run, so the writeup can never quote a
+ * stale check result.
+ */
+function regenerateWriteupTable(artifact: {
+  run_id: number; pinned_block: string;
+  checks: { name?: string; status?: string; blocking?: boolean; difference?: string; tolerance?: string }[];
+}): void {
+  const START = "<!-- reconciliation-table:start -->";
+  const END = "<!-- reconciliation-table:end -->";
+  let md: string;
+  try {
+    md = readFileSync("WRITEUP.md", "utf8");
+  } catch {
+    return; // no writeup in this checkout (e.g. scratch replay dir)
+  }
+  const i0 = md.indexOf(START), i1 = md.indexOf(END);
+  if (i0 === -1 || i1 === -1) return;
+  const rows = artifact.checks.map((c) => {
+    const kind = c.name?.includes("DIAGNOSTIC") ? "diagnostic" : c.blocking ? "blocking" : "info";
+    return `| \`${c.name}\` | ${kind} | ${c.status} | ${c.difference} | ${c.tolerance} |`;
+  }).join("\n");
+  const table = `${START}\n\nGenerated from dashboard/reconciliation.json at reconcile time ` +
+    `(run ${artifact.run_id}, pinned block ${artifact.pinned_block}):\n\n` +
+    `| Check | Kind | Status | Difference | Tolerance |\n|---|---|---|---|---|\n${rows}\n\n${END}`;
+  writeFileSync("WRITEUP.md", md.slice(0, i0) + table + md.slice(i1 + END.length));
+}
 
 async function main(): Promise<void> {
   const pool = createPool();
@@ -339,6 +376,78 @@ async function main(): Promise<void> {
     });
   }
 
+  // ── 10. Cost recomputed in pure SQL from raw tables ─────────────────────
+  {
+    const pinTs = (await client.getBlock({ blockNumber: pinned })).timestamp;
+    const sqlCost = (await pool.query(`
+      WITH bounds AS (
+        SELECT DISTINCT ts FROM (
+          SELECT extract(epoch FROM b.block_timestamp)::numeric AS ts
+            FROM reserve_snapshots s JOIN blocks b ON b.block_number = s.block_number
+          UNION ALL
+          SELECT extract(epoch FROM b.block_timestamp)::numeric
+            FROM ssr_changes c JOIN blocks b ON b.block_number = c.block_number
+          UNION ALL
+          SELECT extract(epoch FROM b.block_timestamp)::numeric
+            FROM position_events p JOIN blocks b ON b.block_number = p.block_number
+            WHERE p.strategy_id = $1
+          UNION ALL
+          SELECT extract(epoch FROM effective_from)::numeric FROM strategy_cost_terms
+            WHERE strategy_id = $1
+          UNION ALL SELECT $2::numeric
+        ) u
+        WHERE ts <= $2::numeric
+          AND ts >= (SELECT min(extract(epoch FROM b.block_timestamp))
+                     FROM position_events p JOIN blocks b ON b.block_number = p.block_number
+                     WHERE p.strategy_id = $1)
+      ),
+      iv AS (SELECT ts AS t0, LEAD(ts) OVER (ORDER BY ts) AS t1 FROM bounds)
+      SELECT trunc(COALESCE(SUM(
+        trunc(scaled.s * idx.i / 1e27)
+        * ((power((ssr.v / 1e27)::float8, 31536000)::numeric - 1) + term.bps / 10000)
+        * (iv.t1 - iv.t0) / 31536000
+        * snap.debt / snap.supply
+      ), 0))::text AS cost
+      FROM iv
+      CROSS JOIN LATERAL (
+        SELECT COALESCE(SUM(CASE WHEN p.kind = 'supply'
+          THEN trunc((p.amount * 1e27 + p.liquidity_index_at / 2) / p.liquidity_index_at)
+          ELSE -trunc((p.amount * 1e27 + p.liquidity_index_at / 2) / p.liquidity_index_at) END), 0) AS s
+        FROM position_events p JOIN blocks b ON b.block_number = p.block_number
+        WHERE p.strategy_id = $1 AND extract(epoch FROM b.block_timestamp) <= iv.t0) scaled
+      CROSS JOIN LATERAL (
+        SELECT r.liquidity_index AS i
+        FROM reserve_updates r JOIN blocks b ON b.block_number = r.block_number
+        WHERE extract(epoch FROM b.block_timestamp) <= iv.t0
+        ORDER BY r.block_number DESC, r.log_index DESC LIMIT 1) idx
+      CROSS JOIN LATERAL (
+        SELECT c.ssr AS v
+        FROM ssr_changes c JOIN blocks b ON b.block_number = c.block_number
+        WHERE extract(epoch FROM b.block_timestamp) <= iv.t0
+        ORDER BY c.block_number DESC, c.log_index DESC LIMIT 1) ssr
+      CROSS JOIN LATERAL (
+        SELECT t.spread_bps AS bps FROM strategy_cost_terms t
+        WHERE t.strategy_id = $1 AND extract(epoch FROM t.effective_from) <= iv.t0
+        ORDER BY t.effective_from DESC LIMIT 1) term
+      CROSS JOIN LATERAL (
+        SELECT s.variable_debt_total_supply AS debt, s.atoken_total_supply AS supply
+        FROM reserve_snapshots s JOIN blocks b ON b.block_number = s.block_number
+        WHERE extract(epoch FROM b.block_timestamp) <= iv.t0
+        ORDER BY s.block_number DESC LIMIT 1) snap
+      WHERE iv.t1 IS NOT NULL
+    `, [strategy.id, pinTs.toString()])).rows[0] as { cost: string };
+    const engineCost = BigInt(seg.cost);
+    results.push({
+      name: "10_cost_sql_recomputation",
+      expected: BigInt(sqlCost.cost).toString(), actual: engineCost.toString(),
+      // Documented tolerance 0.02 USDS (2e16 wei): per-segment flooring
+      // (≤1 wei × segments) + float8 annualization (~1e-15 relative) +
+      // last-update-stale index at the handful of interpolated boundaries
+      // (≤ within-segment index growth, measured max 1.4e-5 relative).
+      tolerance: "20000000000000000", blocking: true,
+    });
+  }
+
   // ── Required-check registry (item: a missing check must fail the gate) ──
   for (const required of REQUIRED_CHECKS) {
     if (!results.some((r) => r.name === required)) {
@@ -394,16 +503,22 @@ async function main(): Promise<void> {
     await c.query("COMMIT");
 
     // Committed JSON artifact next to the dashboard: the machine-readable
-    // twin of ops_reconciliation_runs for the latest run.
-    mkdirSync("dashboard", { recursive: true });
-    writeFileSync("dashboard/reconciliation.json", JSON.stringify({
-      run_id: Number(runId),
-      pinned_block: pinned.toString(),
-      pinned_block_hash: pinnedHash,
-      generated_at: new Date().toISOString(),
-      all_blocking_passed: failedBlocking === 0,
-      checks: artifactChecks,
-    }, null, 2) + "\n");
+    // twin of ops_reconciliation_runs for the latest run. Skippable via
+    // RECONCILE_ARTIFACTS=0 (used by the corruption test, whose
+    // deliberately-failing runs must not clobber the real artifacts).
+    if (process.env.RECONCILE_ARTIFACTS !== "0") {
+      mkdirSync("dashboard", { recursive: true });
+      const artifact = {
+        run_id: Number(runId),
+        pinned_block: pinned.toString(),
+        pinned_block_hash: pinnedHash,
+        generated_at: new Date().toISOString(),
+        all_blocking_passed: failedBlocking === 0,
+        checks: artifactChecks,
+      };
+      writeFileSync("dashboard/reconciliation.json", JSON.stringify(artifact, null, 2) + "\n");
+      regenerateWriteupTable(artifact);
+    }
   } catch (error) {
     await c.query("ROLLBACK");
     throw error;

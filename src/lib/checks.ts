@@ -15,6 +15,7 @@ export const REQUIRED_CHECKS = [
   "7_chi_rpow_recomputation",
   "8_DIAGNOSTIC_rate_integral_vs_index_revenue",
   "9_DIAGNOSTIC_utilization_definitions",
+  "10_cost_sql_recomputation",
 ] as const;
 
 export const isDiagnostic = (name: string): boolean => name.includes("DIAGNOSTIC");

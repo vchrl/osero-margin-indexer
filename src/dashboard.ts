@@ -218,8 +218,10 @@ async function main(): Promise<void> {
      FROM pnl_daily WHERE strategy_id=$1 ORDER BY day`, [strategyId])).rows as DailyRow[];
   const window = (await pool.query(
     `SELECT extract(epoch FROM min(t_start))::bigint::text AS t0,
-            extract(epoch FROM max(t_end))::bigint::text AS t1
-     FROM accrual_segments WHERE strategy_id=$1`, [strategyId])).rows[0] as { t0: string; t1: string };
+            extract(epoch FROM max(t_end))::bigint::text AS t1,
+            SUM(position * extract(epoch FROM (t_end - t_start)))::text AS pos_dt
+     FROM accrual_segments WHERE strategy_id=$1`, [strategyId])).rows[0] as
+    { t0: string; t1: string; pos_dt: string };
   await pool.end();
 
   const assumptionsHtml = mdToHtml(readFileSync("ASSUMPTIONS.md", "utf8"));
@@ -249,7 +251,9 @@ async function main(): Promise<void> {
   const totCost = daily.reduce((a, d) => a + BigInt(d.cost), 0n);
   const totNet = totRev - totCost;
   const windowDays = (Number(window.t1) - Number(window.t0)) / 86_400;
-  const annMarginBps = (usds(totNet) / position) * (365 / windowDays) * 10_000;
+  // Exposure-weighted: net × YEAR × 1e4 / Σ(position × dt) — consistent
+  // with the daily rows; robust to mid-window position changes.
+  const annMarginBps = (Number(totNet) * YEAR_S * 1e4) / Number(window.pos_dt);
   const perDay = usds(totNet) / windowDays;
   const lastDayPartial = Number(window.t1) % 86_400 !== 0;
   const partialDay = lastDayPartial ? daily[daily.length - 1]!.day : null;
@@ -478,7 +482,8 @@ async function main(): Promise<void> {
     all as of the pinned block, annualized — the run-rate of the final accrual
     segment. This decides the YES/NO. <strong>Cumulative</strong> = revenue − cost summed
     since the ${eTx(entry.transaction_hash, "1,000,000 USDS entry")} at block ${eBlock(entry.bn)};
-    its annualized figure is net ÷ position × (365 ÷ ${fmt(windowDays, 1)} days) in bps.
+    its annualized figure is exposure-weighted: net × year × 10,000 ÷ Σ(position × dt) in bps
+    (daily rows use the same formula per day).
     Position basis is the ${eAddr(strategyRow.atoken.trim(), "spUSDS")} balance
     (scaled balance × normalized liquidityIndex at the pin).</p>
   </div></details>

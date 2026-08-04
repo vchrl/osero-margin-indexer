@@ -62,6 +62,11 @@ behind it. Anything the brief leaves unspecified is flagged **ASSUMPTION**.
   balance: `revenue(seg) = position × (index_end / index_start − 1)`.
   Integrating `liquidityRate` over time is used only as a reconciliation
   cross-check, never as the primary number.
+- At segment boundaries that are not reserve updates (SSR changes, position
+  events, cost-term starts), the liquidityIndex is **linearly interpolated
+  in time** within the surrounding reserve interval. Interpolation cancels
+  in the telescoping sum — cumulative revenue is unchanged to the wei — it
+  only affects attribution between the two segments sharing the boundary.
 - Position basis: aToken `balanceOf(ALM proxy)` equivalent at segment start
   (scaled balance × segment-start liquidityIndex).
 

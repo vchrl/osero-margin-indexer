@@ -105,21 +105,22 @@
 
 <h1>Is Osero making money?</h1>
 <div class="gate"><span class="dot"></span>
-  data as of block <a href="https://etherscan.io/block/25682695" target="_blank" rel="noopener">25682695</a> · reconcile run 2 · all blocking checks passed
+  data as of block <a href="https://etherscan.io/block/25683168" target="_blank" rel="noopener">25683168</a> · reconcile run 4 · all blocking checks passed
 </div>
 
 <div class="headline">
   <div class="big">NO — running at -27.1 bps as of the pinned block</div>
   <div class="sub"><strong>Current margin</strong> (final segment at pin, annualized): <strong>-27.1 bps</strong>
-   · <strong>Cumulative since inception</strong>: net <strong>-83.99 USDS</strong>
-   (≈ -27.0 bps annualized, losing ≈ <strong>$7.42/day</strong>)
-   over <strong>11.3</strong> days (SparkLend USDS, entered 2026-07-24)</div>
+   · <strong>Cumulative since inception</strong>: net <strong>-84.48 USDS</strong>
+   (≈ -27.1 bps annualized, losing ≈ <strong>$7.42/day</strong>)
+   over <strong>11.4</strong> days (SparkLend USDS, entered 2026-07-24)</div>
   <details class="method"><summary>Methodology</summary><div class="method-body">
     <p><strong>Current margin</strong> = liquidityRate − (SSR + spread) × utilization,
     all as of the pinned block, annualized — the run-rate of the final accrual
     segment. This decides the YES/NO. <strong>Cumulative</strong> = revenue − cost summed
     since the <a href="https://etherscan.io/tx/0xff40710593559c22a5a795dd4725a1a12447d350f28564d16fe732ba3d1c19f3" target="_blank" rel="noopener"><code>1,000,000 USDS entry</code></a> at block <a href="https://etherscan.io/block/25601435" target="_blank" rel="noopener">25601435</a>;
-    its annualized figure is net ÷ position × (365 ÷ 11.3 days) in bps.
+    its annualized figure is exposure-weighted: net × year × 10,000 ÷ Σ(position × dt) in bps
+    (daily rows use the same formula per day).
     Position basis is the <a href="https://etherscan.io/address/0xC02aB1A5eaA8d1B114EF786D9bde108cD4364359" target="_blank" rel="noopener"><code>spUSDS</code></a> balance
     (scaled balance × normalized liquidityIndex at the pin).</p>
   </div></details>
@@ -129,9 +130,9 @@
   <h2>Cumulative P&amp;L since inception</h2>
   
 <div class="stats">
-  <div class="stat"><div class="k">Revenue (supply yield)</div><div class="v">631.34 <span class="muted">USDS</span></div></div>
-  <div class="stat"><div class="k">Cost (SSR+20bps × borrowed)</div><div class="v">715.33 <span class="muted">USDS</span></div></div>
-  <div class="stat"><div class="k">Net</div><div class="v bad">-83.99 <span class="muted">USDS</span></div></div>
+  <div class="stat"><div class="k">Revenue (supply yield)</div><div class="v">635.01 <span class="muted">USDS</span></div></div>
+  <div class="stat"><div class="k">Cost (SSR+20bps × borrowed)</div><div class="v">719.49 <span class="muted">USDS</span></div></div>
+  <div class="stat"><div class="k">Net</div><div class="v bad">-84.48 <span class="muted">USDS</span></div></div>
 </div>
 <div class="legend"><span><span class="sw" style="background:#1857ec"></span>revenue</span>
 <span><span class="sw" style="background:#f0bf0d"></span>cost</span>
@@ -139,7 +140,7 @@
 <svg id="chart-cum" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 300" width="100%">
   <line class="grid" x1="64" x2="824" y1="260.0" y2="260.0"/><text class="tick" x="54" y="264.0" text-anchor="end">-200</text><line class="grid" x1="64" x2="824" y1="212.0" y2="212.0"/><text class="tick" x="54" y="216.0" text-anchor="end">0</text><line class="grid" x1="64" x2="824" y1="164.0" y2="164.0"/><text class="tick" x="54" y="168.0" text-anchor="end">200</text><line class="grid" x1="64" x2="824" y1="116.0" y2="116.0"/><text class="tick" x="54" y="120.0" text-anchor="end">400</text><line class="grid" x1="64" x2="824" y1="68.0" y2="68.0"/><text class="tick" x="54" y="72.0" text-anchor="end">600</text><line class="grid" x1="64" x2="824" y1="20.0" y2="20.0"/><text class="tick" x="54" y="24.0" text-anchor="end">800</text><line class="zero" x1="64" x2="824" y1="212.0" y2="212.0"/><text class="tick" transform="rotate(-90)" x="-140" y="14" text-anchor="middle">USDS (cumulative)</text><text class="tick" x="95.7" y="280" text-anchor="middle">07-24</text><text class="tick" x="159.0" y="280" text-anchor="middle">07-25</text><text class="tick" x="222.3" y="280" text-anchor="middle">07-26</text><text class="tick" x="285.7" y="280" text-anchor="middle">07-27</text><text class="tick" x="349.0" y="280" text-anchor="middle">07-28</text><text class="tick" x="412.3" y="280" text-anchor="middle">07-29</text><text class="tick" x="475.7" y="280" text-anchor="middle">07-30</text><text class="tick" x="539.0" y="280" text-anchor="middle">07-31</text><text class="tick" x="602.3" y="280" text-anchor="middle">08-01</text><text class="tick" x="665.7" y="280" text-anchor="middle">08-02</text><text class="tick" x="729.0" y="280" text-anchor="middle">08-03</text><text class="tick" x="792.3" y="280" text-anchor="middle">08-04*</text>
   <line class="axisline" x1="64" x2="824" y1="260" y2="260"/>
-  <path class="line-rev" d="M95.7,203.4L159.0,190.0L222.3,176.6L285.7,163.3L349.0,149.9L412.3,136.5L475.7,123.1L539.0,109.7L602.3,96.3L665.7,83.0L729.0,69.6L792.3,60.5"/><path class="line-cost" d="M95.7,202.3L159.0,187.1L222.3,171.9L285.7,156.8L349.0,141.6L412.3,126.5L475.7,111.3L539.0,96.1L602.3,81.0L665.7,65.8L729.0,50.6L792.3,40.3"/><path class="line-net" d="M95.7,213.1L159.0,214.9L222.3,216.7L285.7,218.5L349.0,220.3L412.3,222.0L475.7,223.8L539.0,225.6L602.3,227.4L665.7,229.2L729.0,230.9L792.3,232.2"/>
+  <path class="line-rev" d="M95.7,203.4L159.0,190.0L222.3,176.6L285.7,163.3L349.0,149.9L412.3,136.5L475.7,123.1L539.0,109.7L602.3,96.3L665.7,83.0L729.0,69.6L792.3,59.6"/><path class="line-cost" d="M95.7,202.3L159.0,187.1L222.3,171.9L285.7,156.8L349.0,141.6L412.3,126.5L475.7,111.3L539.0,96.1L602.3,81.0L665.7,65.8L729.0,50.6L792.3,39.3"/><path class="line-net" d="M95.7,213.1L159.0,214.9L222.3,216.7L285.7,218.5L349.0,220.3L412.3,222.0L475.7,223.8L539.0,225.6L602.3,227.4L665.7,229.2L729.0,230.9L792.3,232.3"/>
   <line class="crosshair" x1="0" x2="0" y1="20" y2="260" style="display:none"/>
   <rect class="hover" x="64" y="20" width="760" height="240" fill="transparent"/>
 </svg>
@@ -164,7 +165,7 @@
 <svg id="chart-margin" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 300" width="100%">
   <line class="grid" x1="64" x2="824" y1="260.0" y2="260.0"/><text class="tick" x="54" y="264.0" text-anchor="end">-30</text><line class="grid" x1="64" x2="824" y1="180.0" y2="180.0"/><text class="tick" x="54" y="184.0" text-anchor="end">-20</text><line class="grid" x1="64" x2="824" y1="100.0" y2="100.0"/><text class="tick" x="54" y="104.0" text-anchor="end">-10</text><line class="grid" x1="64" x2="824" y1="20.0" y2="20.0"/><text class="tick" x="54" y="24.0" text-anchor="end">0</text><text class="tick" x="834" y="264.0" text-anchor="start">0%</text><text class="tick" x="834" y="204.0" text-anchor="start">25%</text><text class="tick" x="834" y="144.0" text-anchor="start">50%</text><text class="tick" x="834" y="84.0" text-anchor="start">75%</text><text class="tick" x="834" y="24.0" text-anchor="start">100%</text><text class="tick" transform="rotate(90)" x="140" y="-868" text-anchor="middle">avg utilization</text><text class="tick" transform="rotate(-90)" x="-140" y="14" text-anchor="middle">bps (annualized)</text><text class="tick" x="95.7" y="280" text-anchor="middle">07-24</text><text class="tick" x="159.0" y="280" text-anchor="middle">07-25</text><text class="tick" x="222.3" y="280" text-anchor="middle">07-26</text><text class="tick" x="285.7" y="280" text-anchor="middle">07-27</text><text class="tick" x="349.0" y="280" text-anchor="middle">07-28</text><text class="tick" x="412.3" y="280" text-anchor="middle">07-29</text><text class="tick" x="475.7" y="280" text-anchor="middle">07-30</text><text class="tick" x="539.0" y="280" text-anchor="middle">07-31</text><text class="tick" x="602.3" y="280" text-anchor="middle">08-01</text><text class="tick" x="665.7" y="280" text-anchor="middle">08-02</text><text class="tick" x="729.0" y="280" text-anchor="middle">08-03</text><text class="tick" x="792.3" y="280" text-anchor="middle">08-04*</text>
   <line class="axisline" x1="64" x2="824" y1="260" y2="260"/>
-  <rect class="barneg" rx="2" x="74.8" y="20.0" width="41.8" height="216.4"/><rect class="barneg" rx="2" x="138.1" y="20.0" width="41.8" height="216.5"/><rect class="barneg" rx="2" x="201.4" y="20.0" width="41.8" height="216.5"/><rect class="barneg" rx="2" x="264.8" y="20.0" width="41.8" height="216.9"/><rect class="barneg" rx="2" x="328.1" y="20.0" width="41.8" height="216.4"/><rect class="barneg" rx="2" x="391.4" y="20.0" width="41.8" height="216.7"/><rect class="barneg" rx="2" x="454.8" y="20.0" width="41.8" height="216.5"/><rect class="barneg" rx="2" x="518.1" y="20.0" width="41.8" height="216.5"/><rect class="barneg" rx="2" x="581.4" y="20.0" width="41.8" height="216.5"/><rect class="barneg" rx="2" x="644.8" y="20.0" width="41.8" height="216.6"/><rect class="barneg" rx="2" x="708.1" y="20.0" width="41.8" height="216.5"/><rect class="barneg" rx="2" x="771.4" y="20.0" width="41.8" height="216.4"/><path class="line-util" d="M95.7,111.3L159.0,111.3L222.3,111.3L285.7,111.3L349.0,111.2L412.3,111.3L475.7,111.2L539.0,111.2L602.3,111.2L665.7,111.3L729.0,111.2L792.3,111.2"/>
+  <rect class="barneg" rx="2" x="74.8" y="20.0" width="41.8" height="216.5"/><rect class="barneg" rx="2" x="138.1" y="20.0" width="41.8" height="216.5"/><rect class="barneg" rx="2" x="201.4" y="20.0" width="41.8" height="216.5"/><rect class="barneg" rx="2" x="264.8" y="20.0" width="41.8" height="216.9"/><rect class="barneg" rx="2" x="328.1" y="20.0" width="41.8" height="216.4"/><rect class="barneg" rx="2" x="391.4" y="20.0" width="41.8" height="216.7"/><rect class="barneg" rx="2" x="454.8" y="20.0" width="41.8" height="216.5"/><rect class="barneg" rx="2" x="518.1" y="20.0" width="41.8" height="216.5"/><rect class="barneg" rx="2" x="581.4" y="20.0" width="41.8" height="216.5"/><rect class="barneg" rx="2" x="644.8" y="20.0" width="41.8" height="216.6"/><rect class="barneg" rx="2" x="708.1" y="20.0" width="41.8" height="216.5"/><rect class="barneg" rx="2" x="771.4" y="20.0" width="41.8" height="216.6"/><path class="line-util" d="M95.7,111.3L159.0,111.3L222.3,111.3L285.7,111.3L349.0,111.2L412.3,111.3L475.7,111.2L539.0,111.2L602.3,111.2L665.7,111.3L729.0,111.2L792.3,111.2"/>
   <line class="crosshair" x1="0" x2="0" y1="20" y2="260" style="display:none"/>
   <rect class="hover" x="64" y="20" width="760" height="240" fill="transparent"/>
 </svg>
@@ -192,7 +193,7 @@
 <tr><td>Reserve factor</td><td class="num">10%</td><td class="muted">pin_snapshots (getReserveConfigurationData at pin)</td></tr>
 <tr><td>Utilization</td><td class="num">61.98%</td><td class="muted">pin_snapshots (totalSupply at pin)</td></tr>
 <tr><td>Supply rate (liquidityRate)</td><td class="num">2.04%</td><td class="muted">ReserveDataUpdated</td></tr>
-<tr><td>Deployed position</td><td class="num">1,001,631.34 USDS</td><td class="muted">scaled balance × normalized index at pin</td></tr>
+<tr><td>Deployed position</td><td class="num">1,001,635.01 USDS</td><td class="muted">scaled balance × normalized index at pin</td></tr>
 </table>
   <details class="method"><summary>Methodology</summary><div class="method-body">
   <p>All inputs come from the indexed Postgres state at the pinned block —
@@ -316,19 +317,19 @@ or equivalently SSR must fall below <strong>3.08%</strong> (currently 3.52%).</p
     <td class="num bad">-27.1</td>
     <td class="num">62.0%</td></tr>
 <tr><td>2026-08-04 <span class="muted">(partial)</span></td>
-    <td class="num">37.88</td>
-    <td class="num">42.92</td>
-    <td class="num bad">-5.04</td>
-    <td class="num bad">-27.0</td>
+    <td class="num">41.56</td>
+    <td class="num">47.09</td>
+    <td class="num bad">-5.53</td>
+    <td class="num bad">-27.1</td>
     <td class="num">62.0%</td></tr>
 </table>
   <details class="method"><summary>Methodology</summary><div class="method-body">
-  <p><strong>Data provenance:</strong> pinned block <a href="https://etherscan.io/block/25682695" target="_blank" rel="noopener">25682695</a>
-  (hash <code>0xb1f2a257b522a2e23cdd96db09c88a41b2536e7c1161f037cead1eaf8eb7d62a</code>), entry tx <a href="https://etherscan.io/tx/0xff40710593559c22a5a795dd4725a1a12447d350f28564d16fe732ba3d1c19f3" target="_blank" rel="noopener"><code>0xff407105…1c19f3</code></a>,
-  accrual run 1 computed 2026-08-04T17:15:42.336Z,
-  reconcile run 2. The dashboard refuses to render if any
+  <p><strong>Data provenance:</strong> pinned block <a href="https://etherscan.io/block/25683168" target="_blank" rel="noopener">25683168</a>
+  (hash <code>0x8a9b8a7bf91ca5ed3eb1ce2517079076614d11a85d10e131501b7507afa2610b</code>), entry tx <a href="https://etherscan.io/tx/0xff40710593559c22a5a795dd4725a1a12447d350f28564d16fe732ba3d1c19f3" target="_blank" rel="noopener"><code>0xff407105…1c19f3</code></a>,
+  accrual run 3 computed 2026-08-04T18:05:35.769Z,
+  reconcile run 4. The dashboard refuses to render if any
   blocking check fails. Latest run:</p>
-  <ul><li><span class="good">PASS</span> <code>1_draws_minus_repays_eq_vat_art</code></li><li><span class="good">PASS</span> <code>2_scaled_times_index_eq_balanceOf</code></li><li><span class="good">PASS</span> <code>3_sum_revenue_eq_balance_growth</code></li><li><span class="good">PASS</span> <code>4_segment_continuity_and_coverage</code></li><li><span class="good">PASS</span> <code>5_buffer_balance_eq_net_flow</code></li><li><span class="good">PASS</span> <code>6_stored_addresses_eq_fresh_resolution</code></li><li><span class="good">PASS</span> <code>7_chi_rpow_recomputation</code></li><li><span class="good">PASS</span> <code>8_DIAGNOSTIC_rate_integral_vs_index_revenue</code> <span class="muted">(diagnostic, non-blocking)</span></li><li><span class="good">PASS</span> <code>9_DIAGNOSTIC_utilization_definitions</code> <span class="muted">(diagnostic, non-blocking)</span></li></ul>
+  <ul><li><span class="good">PASS</span> <code>1_draws_minus_repays_eq_vat_art</code></li><li><span class="good">PASS</span> <code>10_cost_sql_recomputation</code></li><li><span class="good">PASS</span> <code>2_scaled_times_index_eq_balanceOf</code></li><li><span class="good">PASS</span> <code>3_sum_revenue_eq_balance_growth</code></li><li><span class="good">PASS</span> <code>4_segment_continuity_and_coverage</code></li><li><span class="good">PASS</span> <code>5_buffer_balance_eq_net_flow</code></li><li><span class="good">PASS</span> <code>6_stored_addresses_eq_fresh_resolution</code></li><li><span class="good">PASS</span> <code>7_chi_rpow_recomputation</code></li><li><span class="good">PASS</span> <code>8_DIAGNOSTIC_rate_integral_vs_index_revenue</code> <span class="muted">(diagnostic, non-blocking)</span></li><li><span class="good">PASS</span> <code>9_DIAGNOSTIC_utilization_definitions</code> <span class="muted">(diagnostic, non-blocking)</span></li></ul>
   <p>Amounts in USDS (2dp), rates 2dp, margins 1dp bps. Check definitions:
   <code>src/reconcile.ts</code>; conventions: Assumptions below.</p></div></details>
 </section>
@@ -356,6 +357,7 @@ or equivalently SSR must fall below <strong>3.08%</strong> (currently 3.52%).</p
 <h3>Revenue side (what SparkLend pays Osero)</h3>
 <ul>
 <li>Ground truth is <strong>liquidityIndex ratio growth</strong> on Osero's scaled aToken balance: <code>revenue(seg) = position × (index_end / index_start − 1)</code>. Integrating <code>liquidityRate</code> over time is used only as a reconciliation cross-check, never as the primary number.</li>
+<li>At segment boundaries that are not reserve updates (SSR changes, position events, cost-term starts), the liquidityIndex is **linearly interpolated in time** within the surrounding reserve interval. Interpolation cancels in the telescoping sum — cumulative revenue is unchanged to the wei — it only affects attribution between the two segments sharing the boundary.</li>
 <li>Position basis: aToken <code>balanceOf(ALM proxy)</code> equivalent at segment start (scaled balance × segment-start liquidityIndex).</li>
 </ul>
 <h3>Structural margin (dashboard + writeup)</h3>
@@ -375,7 +377,7 @@ or equivalently SSR must fall below <strong>3.08%</strong> (currently 3.52%).</p
 </section>
 
 <p class="footer">Generated from reconciled Postgres state; opening this file makes no network
-requests. Numbers are frozen at pinned block <a href="https://etherscan.io/block/25682695" target="_blank" rel="noopener">25682695</a> and can only change by
+requests. Numbers are frozen at pinned block <a href="https://etherscan.io/block/25683168" target="_blank" rel="noopener">25683168</a> and can only change by
 rerunning the pipeline through the reconciliation gate.
 Visual language after stablewatch.io/analytics.</p>
 
@@ -416,8 +418,8 @@ Visual language after stablewatch.io/analytics.</p>
       cross.style.display = "none"; tip.style.display = "none";
     });
   }
-  attach("chart-cum", [{"x":95.7,"lines":["2026-07-24","revenue 35.81 USDS","cost 40.57 USDS","net -4.76 USDS"]},{"x":159,"lines":["2026-07-25","revenue 91.56 USDS","cost 103.74 USDS","net -12.17 USDS"]},{"x":222.3,"lines":["2026-07-26","revenue 147.32 USDS","cost 166.91 USDS","net -19.59 USDS"]},{"x":285.7,"lines":["2026-07-27","revenue 203.04 USDS","cost 230.06 USDS","net -27.02 USDS"]},{"x":349,"lines":["2026-07-28","revenue 258.81 USDS","cost 293.25 USDS","net -34.43 USDS"]},{"x":412.3,"lines":["2026-07-29","revenue 314.56 USDS","cost 356.42 USDS","net -41.86 USDS"]},{"x":475.7,"lines":["2026-07-30","revenue 370.34 USDS","cost 419.61 USDS","net -49.27 USDS"]},{"x":539,"lines":["2026-07-31","revenue 426.11 USDS","cost 482.80 USDS","net -56.69 USDS"]},{"x":602.3,"lines":["2026-08-01","revenue 481.89 USDS","cost 546.00 USDS","net -64.11 USDS"]},{"x":665.7,"lines":["2026-08-02","revenue 537.67 USDS","cost 609.20 USDS","net -71.53 USDS"]},{"x":729,"lines":["2026-08-03","revenue 593.46 USDS","cost 672.41 USDS","net -78.95 USDS"]},{"x":792.3,"lines":["2026-08-04 (partial day)","revenue 631.34 USDS","cost 715.33 USDS","net -83.99 USDS"]}]);
-  attach("chart-margin", [{"x":95.7,"lines":["2026-07-24","margin -27.1 bps ann.","avg utilization 62.0%"]},{"x":159,"lines":["2026-07-25","margin -27.1 bps ann.","avg utilization 62.0%"]},{"x":222.3,"lines":["2026-07-26","margin -27.1 bps ann.","avg utilization 62.0%"]},{"x":285.7,"lines":["2026-07-27","margin -27.1 bps ann.","avg utilization 62.0%"]},{"x":349,"lines":["2026-07-28","margin -27.1 bps ann.","avg utilization 62.0%"]},{"x":412.3,"lines":["2026-07-29","margin -27.1 bps ann.","avg utilization 62.0%"]},{"x":475.7,"lines":["2026-07-30","margin -27.1 bps ann.","avg utilization 62.0%"]},{"x":539,"lines":["2026-07-31","margin -27.1 bps ann.","avg utilization 62.0%"]},{"x":602.3,"lines":["2026-08-01","margin -27.1 bps ann.","avg utilization 62.0%"]},{"x":665.7,"lines":["2026-08-02","margin -27.1 bps ann.","avg utilization 62.0%"]},{"x":729,"lines":["2026-08-03","margin -27.1 bps ann.","avg utilization 62.0%"]},{"x":792.3,"lines":["2026-08-04 (partial day)","margin -27.0 bps ann.","avg utilization 62.0%"]}]);
+  attach("chart-cum", [{"x":95.7,"lines":["2026-07-24","revenue 35.81 USDS","cost 40.57 USDS","net -4.76 USDS"]},{"x":159,"lines":["2026-07-25","revenue 91.56 USDS","cost 103.74 USDS","net -12.17 USDS"]},{"x":222.3,"lines":["2026-07-26","revenue 147.32 USDS","cost 166.91 USDS","net -19.59 USDS"]},{"x":285.7,"lines":["2026-07-27","revenue 203.04 USDS","cost 230.06 USDS","net -27.02 USDS"]},{"x":349,"lines":["2026-07-28","revenue 258.81 USDS","cost 293.25 USDS","net -34.43 USDS"]},{"x":412.3,"lines":["2026-07-29","revenue 314.56 USDS","cost 356.42 USDS","net -41.86 USDS"]},{"x":475.7,"lines":["2026-07-30","revenue 370.34 USDS","cost 419.61 USDS","net -49.27 USDS"]},{"x":539,"lines":["2026-07-31","revenue 426.11 USDS","cost 482.80 USDS","net -56.69 USDS"]},{"x":602.3,"lines":["2026-08-01","revenue 481.89 USDS","cost 546.00 USDS","net -64.11 USDS"]},{"x":665.7,"lines":["2026-08-02","revenue 537.67 USDS","cost 609.20 USDS","net -71.53 USDS"]},{"x":729,"lines":["2026-08-03","revenue 593.46 USDS","cost 672.41 USDS","net -78.95 USDS"]},{"x":792.3,"lines":["2026-08-04 (partial day)","revenue 635.01 USDS","cost 719.49 USDS","net -84.48 USDS"]}]);
+  attach("chart-margin", [{"x":95.7,"lines":["2026-07-24","margin -27.1 bps ann.","avg utilization 62.0%"]},{"x":159,"lines":["2026-07-25","margin -27.1 bps ann.","avg utilization 62.0%"]},{"x":222.3,"lines":["2026-07-26","margin -27.1 bps ann.","avg utilization 62.0%"]},{"x":285.7,"lines":["2026-07-27","margin -27.1 bps ann.","avg utilization 62.0%"]},{"x":349,"lines":["2026-07-28","margin -27.1 bps ann.","avg utilization 62.0%"]},{"x":412.3,"lines":["2026-07-29","margin -27.1 bps ann.","avg utilization 62.0%"]},{"x":475.7,"lines":["2026-07-30","margin -27.1 bps ann.","avg utilization 62.0%"]},{"x":539,"lines":["2026-07-31","margin -27.1 bps ann.","avg utilization 62.0%"]},{"x":602.3,"lines":["2026-08-01","margin -27.1 bps ann.","avg utilization 62.0%"]},{"x":665.7,"lines":["2026-08-02","margin -27.1 bps ann.","avg utilization 62.0%"]},{"x":729,"lines":["2026-08-03","margin -27.1 bps ann.","avg utilization 62.0%"]},{"x":792.3,"lines":["2026-08-04 (partial day)","margin -27.1 bps ann.","avg utilization 62.0%"]}]);
 })();
 </script>
 </body></html>

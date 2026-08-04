@@ -8,7 +8,8 @@
  * and the daily GH Actions refresh trustworthy.
  *
  * Usage: DATABASE_URL=<prod db> npx tsx test/replay.ts
- * Creates/drops <dbname>_replaytest on the same server. Needs RPC access;
+ * Creates <dbname>_replaytest on the same server; drops it on success,
+ * keeps it for debugging on failure. Needs RPC access + CREATEDB rights;
  * takes ~10min (full re-index of the range).
  */
 
@@ -64,7 +65,9 @@ async function main(): Promise<void> {
   await admin.end();
   console.log(`Replaying from scratch into ${dbName}, pinned to block ${pinned}...`);
 
-  const env = { ...process.env, DATABASE_URL: url, END_BLOCK: pinned };
+  // RECONCILE_ARTIFACTS=0: the scratch run must not rewrite the committed
+  // reconciliation.json / writeup table with its own run ids.
+  const env = { ...process.env, DATABASE_URL: url, END_BLOCK: pinned, RECONCILE_ARTIFACTS: "0" };
   for (const script of ["src/index.ts", "src/accrue.ts", "src/reconcile.ts"]) {
     console.log(`\n=== ${script} (replay) ===`);
     execFileSync("npx", ["tsx", script], { env, stdio: "inherit" });
@@ -85,9 +88,15 @@ async function main(): Promise<void> {
         break;
       }
     }
+    console.error(`Scratch database ${dbName} kept for debugging.`);
     process.exit(1);
   }
   console.log("\nEquivalence holds: incremental == full replay.");
+  const admin2 = new pg.Client({ connectionString: adminUrl });
+  await admin2.connect();
+  await admin2.query(`DROP DATABASE ${dbName}`);
+  await admin2.end();
+  console.log(`Scratch database ${dbName} dropped.`);
 }
 
 main().catch((error) => {

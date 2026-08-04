@@ -12,7 +12,7 @@ Starting anchors: the ilk `ALLOCATOR-PRYSM-A` and the ALM proxy `0x6d370e359e9cb
 
 **Step 2, governance history.** Searching vote.sky.money for the ilk dated the lifecycle. The Feb 26, 2026 executive initialized the ilk (line 10M, gap 10M, duty 0%, ttl 24h) with the same vault and buffer addresses the Chainlog carries, which cross-confirmed step 1. The Jul 16, 2026 executive is where the strategy appears: it onboards a Diamond PAU Controller on the Osero instance, authorizes the ALM proxy on the vault and buffer, whitelists it on the LitePSM, onboards "SparkLend USDS (spUSDS)" with rate limits, and cuts the ceiling to 5M with a 1M gap. The accompanying Atlas edit sets maximum exposure at 5,000,000 USDS and a 100% capital ratio requirement. That named the venue before I touched a single transaction.
 
-**Step 3, verify on chain.** Governance text is a claim, not a fact, so I traced the ALM proxy itself. It has exactly two transactions. Deployment on Jun 23, 2026 (block 25,383,064) by the PAUFactory, plus role grants. Then one action on Jul 24, 2026 (block 25,601,435, tx `0xff40710593559c22a5a795dd4725a1a12447d350f28564d16fe732ba3d1c19f3`): in a single atomic transaction the proxy draws 1,000,000 USDS from the AllocatorVault, pulls it from the buffer, approves, and calls `Pool.supply` on SparkLend, receiving 1,000,000 spUSDS minted to itself. The trace confirmed the venue, resolved the spUSDS aToken address, and established the position history at the time of discovery: one entry, no withdrawals. (A second, identical-pattern draw+supply of 1,000 USDS followed on Aug 4, 2026, block 25,681,464, while this exercise was underway — the indexer picked it up in the normal incremental run and reconcile check 1 tracks the vat debt at 1,001,000 exactly.)
+**Step 3, verify on chain.** Governance text is a claim, not a fact, so I traced the ALM proxy itself. At discovery time it had exactly two transactions (a third — the Aug 4 top-up described below — arrived while this exercise was underway). Deployment on Jun 23, 2026 (block 25,383,064) by the PAUFactory, plus role grants. Then one action on Jul 24, 2026 (block 25,601,435, tx `0xff40710593559c22a5a795dd4725a1a12447d350f28564d16fe732ba3d1c19f3`): in a single atomic transaction the proxy draws 1,000,000 USDS from the AllocatorVault, pulls it from the buffer, approves, and calls `Pool.supply` on SparkLend, receiving 1,000,000 spUSDS minted to itself. The trace confirmed the venue, resolved the spUSDS aToken address, and established the position history at the time of discovery: one entry, no withdrawals. (A second, identical-pattern draw+supply of 1,000 USDS followed on Aug 4, 2026, block 25,681,464, while this exercise was underway — the indexer picked it up in the normal incremental run and reconcile check 1 tracks the vat debt at 1,001,000 exactly.)
 
 **Step 4, resolve the venue's own contracts on chain.** I did not trust any remembered or third-party address for the SparkLend periphery. From the Pool: `ADDRESSES_PROVIDER()` then `getPoolDataProvider()` gives the ProtocolDataProvider, and from it `getReserveTokensAddresses(USDS)` and `getInterestRateStrategyAddress(USDS)` give the aToken (matching the trace exactly), the variable debt token, and the rate strategy. The reconcile suite re-runs this resolution every run and compares it to the stored values.
 
@@ -59,6 +59,8 @@ Second, two addresses I typed by hand (the variable debt token and the rate stra
 
 Third, a refinement rather than a bug. My first break-even framing was "margin flips at 54.6% utilization." That view is internally inconsistent on an Aave-style curve, because the supply rate is itself a function of utilization. Substituting liquidityRate = borrowRate x utilization x (1 - reserveFactor) gives margin per unit deployed = utilization x [borrowRate x (1 - RF) - (SSR + 20bps)]. Utilization scales the magnitude of profit or loss; only the bracketed rate spread can flip the sign. With the borrow rate at 3.65%, RF at 10% and the cost rate at 3.72%, the bracket is -0.44%. The [dashboard](src/dashboard.ts) shows both views and says which one is real.
 
+Strictly, two different utilizations appear in that identity (section 3, "Which utilization"): the exact form is margin = borrowRate x (1 - RF) x u_rate - costRate x u_claims, where u_rate is the rate-model ratio and u_claims the supplier-claims ratio. The exact break-even borrow rate is costRate x u_claims / ((1 - RF) x u_rate) = 4.1337%, versus 4.1333% from the simplified single-u identity - a 0.4bp-of-a-bp difference. The simplified form is kept everywhere as the intuition, with this as the caveat: at this reserve's treasury-accrual gap the two are indistinguishable in practice.
+
 ## 4. Data model, and why
 
 Three stages, physically separate scripts writing separate tables, so each can be tested and replaced independently.
@@ -75,16 +77,24 @@ Extension path: `strategies` carries venue, chain_id, and the token addresses, a
 
 Eight checks run after every accrual, write their results to `ops_reconciliation_runs`, and gate the dashboard: a failed blocking check exits nonzero and nothing renders. At block 25,678,138:
 
-| # | Check | Type | Result |
-|---|---|---|---|
-| 1 | Sum of draws minus repays equals vat.urns(ilk).art | exact | pass, 0 (both exactly 1,000,000e18) |
-| 2 | Scaled balance x index equals spUSDS.balanceOf(proxy) | tolerance 2 wei | pass, observed difference 1 wei (aToken rounds half-up, engine floors) |
-| 3 | Sum of segment revenue equals balance growth | tolerance | pass, 173 wei over 371 segments |
-| 4 | Segment continuity, no gaps or overlaps | exact | pass |
-| 5 | Buffer USDS balance equals net transfer flows | exact | pass, 0 equals 0 |
-| 6 | Stored periphery addresses equal fresh on-chain resolution | exact | pass, byte-identical |
-| 7 | chi at the File block recomputed via rpow from prior rate | tolerance 1e10 ray units | pass, observed difference 1,014 (~1e-24 relative) |
-| 8 | Rate-integral revenue versus index revenue | diagnostic | pass, 173 wei, twelve significant figures of agreement |
+<!-- reconciliation-table:start -->
+
+Generated from dashboard/reconciliation.json at reconcile time (run 5, pinned block 25683168):
+
+| Check | Kind | Status | Difference | Tolerance |
+|---|---|---|---|---|
+| `1_draws_minus_repays_eq_vat_art` | blocking | pass | 0 | 0 |
+| `2_scaled_times_index_eq_balanceOf` | blocking | pass | 0 | 2 |
+| `3_sum_revenue_eq_balance_growth` | blocking | pass | 188 | 406 |
+| `4_segment_continuity_and_coverage` | blocking | pass | 0 | 0 |
+| `5_buffer_balance_eq_net_flow` | blocking | pass | 0 | 0 |
+| `6_stored_addresses_eq_fresh_resolution` | blocking | pass | 0 | 0 |
+| `7_chi_rpow_recomputation` | blocking | pass | 1014 | 10000000000 |
+| `9_DIAGNOSTIC_utilization_definitions` | diagnostic | pass | 0 | diagnostic |
+| `8_DIAGNOSTIC_rate_integral_vs_index_revenue` | diagnostic | pass | 188 | 3175071961691588151 |
+| `10_cost_sql_recomputation` | blocking | pass | 28861312837393 | 20000000000000000 |
+
+<!-- reconciliation-table:end -->
 
 Tolerances are documented where exact equality is impossible and are sized in wei, not percentages, because these checks are identities: a loose tolerance would absorb real bugs. Checks 2 and 3 are mathematically related (the revenue sum telescopes to the balance identity), which is why check 8 exists as the genuinely independent cross-validation of the revenue path.
 

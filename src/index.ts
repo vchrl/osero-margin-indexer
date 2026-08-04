@@ -465,6 +465,7 @@ async function indexTransfers(
 async function indexSnapshots(
   client: PublicClient,
   pool: pg.Pool,
+  endBlock: bigint,
   counts: StreamCounts,
 ): Promise<void> {
   const wm = await getWatermark(pool, "snapshots");
@@ -475,7 +476,19 @@ async function indexSnapshots(
     [(wm?.highestIndexedBlock ?? 0n).toString()],
   );
   const blocks = res.rows.map((r) => BigInt((r as { bn: string }).bn));
-  if (blocks.length === 0) return;
+  // Advance to the run's end block even when there is nothing to snapshot:
+  // the stream is complete to endBlock by construction (snapshots derive
+  // from reserve_updates, which just indexed to endBlock), and the pin is
+  // min(watermarks) — a lagging snapshots watermark would pin every run to
+  // the last reserve-update block instead of the true indexed end.
+  const finishTo = async () => {
+    const wmNow = await getWatermark(pool, "snapshots");
+    if (wmNow === null || wmNow.highestIndexedBlock < endBlock) {
+      const endHash = await blockHashAt(client, endBlock);
+      await inTx(pool, async (c) => advanceWatermark(c, "snapshots", endBlock, endHash));
+    }
+  };
+  if (blocks.length === 0) { await finishTo(); return; }
   console.log(`  [snapshots] ${blocks.length} blocks to snapshot`);
 
   const BATCH = 5;
@@ -529,6 +542,7 @@ async function indexSnapshots(
       console.log(`  [snapshots] ${Math.min(i + BATCH, blocks.length)}/${blocks.length}`);
     }
   }
+  await finishTo();
 }
 
 // ---------------------------------------------------------------------------
@@ -560,7 +574,12 @@ async function main(): Promise<void> {
   const startBlock = parseBlockEnv("START_BLOCK") ?? DEFAULT_START_BLOCK;
   const endOverride = parseBlockEnv("END_BLOCK");
   const finalized = await client.getBlock({ blockTag: "finalized" });
-  const endBlock = endOverride ?? finalized.number;
+  // Clamp: an END_BLOCK past finalized would index non-finalized state.
+  const endBlock = endOverride !== null && endOverride < finalized.number
+    ? endOverride : finalized.number;
+  if (endOverride !== null && endOverride > finalized.number) {
+    console.warn(`END_BLOCK ${endOverride} is past finalized ${finalized.number}; clamped.`);
+  }
   console.log(`Indexing to block ${endBlock} (finalized: ${finalized.number}) via ${rpcUrl}`);
 
   const counts: StreamCounts = {};
@@ -570,7 +589,7 @@ async function main(): Promise<void> {
   await indexReserve(client, pool, startBlock, endBlock, counts);
   await indexPosition(client, pool, startBlock, endBlock, strategyId, counts);
   await indexTransfers(client, pool, startBlock, endBlock, counts);
-  await indexSnapshots(client, pool, counts);
+  await indexSnapshots(client, pool, endBlock, counts);
 
   console.log("\nDone. New rows per stream:");
   for (const [k, v] of Object.entries(counts)) console.log(`  ${k}: ${v}`);

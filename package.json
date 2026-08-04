@@ -8,7 +8,8 @@
     "accrue": "tsx src/accrue.ts",
     "reconcile": "tsx src/reconcile.ts",
     "dashboard": "tsx src/dashboard.ts",
-    "test:replay": "tsx test/replay.ts"
+    "test:replay": "tsx test/replay.ts",
+    "test:corruption": "tsx test/corruption.ts"
   },
   "dependencies": {
     "pg": "^8.22.0",
