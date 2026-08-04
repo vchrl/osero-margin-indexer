@@ -76,7 +76,7 @@ Derived tables (stage 2, accrual engine): `accrual_segments` (one row per interv
 
 Ops tables: `ops_runs` (pinned block, block hash, computed_at per run), `ops_reconciliation_runs` (every check result with expected, actual, difference and tolerance), `strategy_cost_terms` (the 20 bps spread as data with its source cited, because a commercial assumption should not masquerade as chain state).
 
-Extension path: `strategies` carries venue, chain_id, and the token addresses, and every derived row is keyed by strategy_id. A second venue is a new strategies row, a venue adapter for its events, and no schema rewrite. The honest split: the schema is venue-agnostic today; the stream definitions, the runtime address map (src/addresses.ts) and several checks are venue-specific code that a second venue would have to add — see the README extensibility section for the precise inventory.
+Extension path: `strategies` carries venue, chain_id, and the token addresses, and every derived row is keyed by strategy_id. A second venue is a new strategies row, a venue adapter for its events, and no schema rewrite, with one named exception: the snapshot tables are keyed (chain_id, block_number) with no reserve column, so a second strategy on the same chain extends that key first; cross-chain is additive today. The honest split: the schema is venue-agnostic today; the stream definitions, the runtime address map (src/addresses.ts) and several checks are venue-specific code that a second venue would have to add — see the README extensibility section for the precise inventory.
 
 ## 5. Validation against on-chain reality
 
