@@ -322,7 +322,7 @@ async function indexReserve(
         `INSERT INTO reserve_updates (block_number, log_index, transaction_hash,
            liquidity_rate, variable_borrow_rate, liquidity_index, variable_borrow_index)
          SELECT * FROM unnest($1::bigint[], $2::int[], $3::text[], $4::numeric[], $5::numeric[], $6::numeric[], $7::numeric[])
-         ON CONFLICT (block_number, log_index) DO NOTHING`,
+         ON CONFLICT (chain_id, block_number, log_index) DO NOTHING`,
         [
           rows.map((r) => r.blockNumber.toString()),
           rows.map((r) => r.logIndex),
@@ -440,7 +440,7 @@ async function indexTransfers(
       await c.query(
         `INSERT INTO usds_transfers (block_number, log_index, transaction_hash, from_addr, to_addr, amount)
          SELECT * FROM unnest($1::bigint[], $2::int[], $3::text[], $4::text[], $5::text[], $6::numeric[])
-         ON CONFLICT (block_number, log_index) DO NOTHING`,
+         ON CONFLICT (chain_id, block_number, log_index) DO NOTHING`,
         [
           rows.map((r) => r.blockNumber.toString()),
           rows.map((r) => r.logIndex),
@@ -515,7 +515,7 @@ async function indexSnapshots(
       await c.query(
         `INSERT INTO reserve_snapshots (block_number, atoken_total_supply, variable_debt_total_supply)
          SELECT * FROM unnest($1::bigint[], $2::numeric[], $3::numeric[])
-         ON CONFLICT (block_number) DO NOTHING`,
+         ON CONFLICT (chain_id, block_number) DO NOTHING`,
         [
           rows.map((r) => r.bn.toString()),
           rows.map((r) => r.atoken.toString()),

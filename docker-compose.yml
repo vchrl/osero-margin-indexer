@@ -1,0 +1,16 @@
+# Optional local Postgres for people who don't run one natively.
+#   docker compose up -d postgres
+#   DATABASE_URL=postgres://osero:osero@localhost:5432/osero_margin
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: osero
+      POSTGRES_PASSWORD: osero
+      POSTGRES_DB: osero_margin
+    ports:
+      - "5432:5432"
+    volumes:
+      - osero_pgdata:/var/lib/postgresql/data
+volumes:
+  osero_pgdata:

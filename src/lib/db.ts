@@ -8,8 +8,10 @@
  * per-event tables so NOT NULL is a whole-row invariant, natural key
  * (block_number, log_index) doubling as the range-scan index, and a
  * forward-only watermark advanced in the same transaction as each chunk.
- * New here: multiple event streams (per-source watermarks) and the
- * strategy_id FK so a second venue is an INSERT, not a rewrite.
+ * New here: multiple event streams (per-source watermarks), the
+ * strategy_id FK so a second venue is an INSERT (not a rewrite), and
+ * chain_id in every raw-table natural key (DEFAULT 1 = mainnet) so a
+ * second chain is additive data, not a key migration under load.
  */
 
 import pg from "pg";
@@ -57,16 +59,18 @@ CREATE TABLE IF NOT EXISTS strategies (
 -- Drip-per-row was rejected). chi is the rate accumulator read at the same
 -- block, ssr the per-second rate (ray).
 CREATE TABLE IF NOT EXISTS ssr_changes (
+  chain_id         INTEGER       NOT NULL DEFAULT 1,
   block_number     BIGINT        NOT NULL,
   log_index        INTEGER       NOT NULL,
   transaction_hash CHAR(66)      NOT NULL,
   ssr              NUMERIC(78,0) NOT NULL CHECK (ssr >= 1000000000000000000000000000),
   chi              NUMERIC(78,0) NOT NULL CHECK (chi > 0),
-  PRIMARY KEY (block_number, log_index)
+  PRIMARY KEY (chain_id, block_number, log_index)
 );
 
 -- SparkLend USDS reserve: every ReserveDataUpdated for the USDS reserve.
 CREATE TABLE IF NOT EXISTS reserve_updates (
+  chain_id         INTEGER       NOT NULL DEFAULT 1,
   block_number          BIGINT        NOT NULL,
   log_index             INTEGER       NOT NULL,
   transaction_hash      CHAR(66)      NOT NULL,
@@ -74,12 +78,13 @@ CREATE TABLE IF NOT EXISTS reserve_updates (
   variable_borrow_rate  NUMERIC(78,0) NOT NULL CHECK (variable_borrow_rate >= 0),
   liquidity_index       NUMERIC(78,0) NOT NULL CHECK (liquidity_index > 0),
   variable_borrow_index NUMERIC(78,0) NOT NULL CHECK (variable_borrow_index > 0),
-  PRIMARY KEY (block_number, log_index)
+  PRIMARY KEY (chain_id, block_number, log_index)
 );
 
 -- Osero's position changes: Supply/Withdraw on the Pool for the USDS reserve
 -- with onBehalfOf / user = ALM proxy.
 CREATE TABLE IF NOT EXISTS position_events (
+  chain_id         INTEGER       NOT NULL DEFAULT 1,
   block_number       BIGINT        NOT NULL,
   log_index          INTEGER       NOT NULL,
   transaction_hash   CHAR(66)      NOT NULL,
@@ -87,36 +92,41 @@ CREATE TABLE IF NOT EXISTS position_events (
   kind               TEXT          NOT NULL CHECK (kind IN ('supply', 'withdraw')),
   amount             NUMERIC(78,0) NOT NULL CHECK (amount > 0),
   liquidity_index_at NUMERIC(78,0) NOT NULL CHECK (liquidity_index_at > 0),
-  PRIMARY KEY (block_number, log_index)
+  PRIMARY KEY (chain_id, block_number, log_index)
 );
 
 -- USDS transfers touching the ALM proxy or the allocator buffer: the
 -- draw/repay audit trail reconciled against vat.urns art.
 CREATE TABLE IF NOT EXISTS usds_transfers (
+  chain_id         INTEGER       NOT NULL DEFAULT 1,
   block_number     BIGINT        NOT NULL,
   log_index        INTEGER       NOT NULL,
   transaction_hash CHAR(66)      NOT NULL,
   from_addr        CHAR(42)      NOT NULL,
   to_addr          CHAR(42)      NOT NULL,
   amount           NUMERIC(78,0) NOT NULL CHECK (amount >= 0),
-  PRIMARY KEY (block_number, log_index)
+  PRIMARY KEY (chain_id, block_number, log_index)
 );
 
 -- Utilization inputs: totalSupply of the aToken and the variable debt token,
 -- read via archive eth_call at every block that has a reserve_updates row.
 -- Explicit snapshots, not rate-curve inversion (decision 2026-08-03).
 CREATE TABLE IF NOT EXISTS reserve_snapshots (
-  block_number               BIGINT        PRIMARY KEY,
+  chain_id                   INTEGER       NOT NULL DEFAULT 1,
+  block_number               BIGINT        NOT NULL,
   atoken_total_supply        NUMERIC(78,0) NOT NULL CHECK (atoken_total_supply >= 0),
-  variable_debt_total_supply NUMERIC(78,0) NOT NULL CHECK (variable_debt_total_supply >= 0)
+  variable_debt_total_supply NUMERIC(78,0) NOT NULL CHECK (variable_debt_total_supply >= 0),
+  PRIMARY KEY (chain_id, block_number)
 );
 
 -- One row per block that contains at least one indexed event or snapshot:
 -- real timestamps for segment boundaries, plus the hash for reorg tripwires.
 CREATE TABLE IF NOT EXISTS blocks (
-  block_number    BIGINT      PRIMARY KEY,
+  chain_id        INTEGER     NOT NULL DEFAULT 1,
+  block_number    BIGINT      NOT NULL,
   block_timestamp TIMESTAMPTZ NOT NULL,
-  block_hash      CHAR(66)    NOT NULL
+  block_hash      CHAR(66)    NOT NULL,
+  PRIMARY KEY (chain_id, block_number)
 );
 
 -- One watermark per event stream. highest_indexed_block is contiguous by
@@ -135,12 +145,14 @@ CREATE TABLE IF NOT EXISTS sync_watermarks (
 -- values shown downstream are all from one block, never a mix of
 -- latest-event and live state.
 CREATE TABLE IF NOT EXISTS pin_snapshots (
-  block_number               BIGINT        PRIMARY KEY,
+  chain_id                   INTEGER       NOT NULL DEFAULT 1,
+  block_number               BIGINT        NOT NULL,
   atoken_total_supply        NUMERIC(78,0) NOT NULL CHECK (atoken_total_supply >= 0),
   variable_debt_total_supply NUMERIC(78,0) NOT NULL CHECK (variable_debt_total_supply >= 0),
   liquidity_index_normalized NUMERIC(78,0) NOT NULL CHECK (liquidity_index_normalized > 0),
   reserve_factor_bps         NUMERIC(10,4) NOT NULL CHECK (reserve_factor_bps >= 0),
-  captured_at                TIMESTAMPTZ   NOT NULL DEFAULT now()
+  captured_at                TIMESTAMPTZ   NOT NULL DEFAULT now(),
+  PRIMARY KEY (chain_id, block_number)
 );
 
 -- ── Derived tables (written by the accrual engine, stage 2) ────────────────
@@ -284,7 +296,7 @@ export async function insertBlocks(
     `INSERT INTO blocks (block_number, block_timestamp, block_hash)
      SELECT b, to_timestamp(t), h
      FROM unnest($1::bigint[], $2::bigint[], $3::text[]) AS u(b, t, h)
-     ON CONFLICT (block_number) DO NOTHING`,
+     ON CONFLICT (chain_id, block_number) DO NOTHING`,
     [
       rows.map((r) => r.blockNumber.toString()),
       rows.map((r) => r.timestamp.toString()),

@@ -88,7 +88,7 @@ async function main(): Promise<void> {
   await pool.query(
     `INSERT INTO pin_snapshots (block_number, atoken_total_supply, variable_debt_total_supply,
        liquidity_index_normalized, reserve_factor_bps)
-     VALUES ($1, $2, $3, $4, $5) ON CONFLICT (block_number) DO NOTHING`,
+     VALUES ($1, $2, $3, $4, $5) ON CONFLICT (chain_id, block_number) DO NOTHING`,
     [pinnedBlock.toString(), pinAtoken.toString(), pinDebt.toString(),
      pinNormIncome.toString(), pinReserveFactorBps.toString()],
   );
