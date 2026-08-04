@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Osero margin — SparkLend USDS</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: ui-sans-serif, system-ui, sans-serif; max-width: 960px; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+  h1 { font-size: 1.4rem; } h2 { font-size: 1.1rem; margin-top: 2rem; }
+  .headline { border: 2px solid #f85149; border-radius: 8px; padding: 1rem 1.4rem; margin: 1.2rem 0; }
+  .headline .big { font-size: 1.6rem; font-weight: 700; color: #f85149; }
+  table { border-collapse: collapse; width: 100%; margin: .8rem 0; }
+  th, td { padding: .35rem .6rem; border-bottom: 1px solid #76839044; text-align: left; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .good { color: #3fb950; } .bad { color: #f85149; }
+  .asof { opacity: .7; font-size: .85rem; }
+  code { font-size: .9em; }
+</style></head><body>
+<h1>Is Osero making money? — SparkLend USDS strategy</h1>
+<p class="asof">Data as of block <strong>25678138</strong>
+ (0x61dea991fd31…), computed 2026-08-04T02:07:54.135Z,
+ reconcile run 3: all blocking checks passed.</p>
+
+<div class="headline">
+  <div class="big">NO — net -79.28 USDS since inception</div>
+  <div>Annualized margin ≈ <strong>-27.1 bps</strong> on the deployed position
+   · losing ≈ <strong>$7.42/day</strong>
+   over 10.7 days</div>
+</div>
+
+<h2>Current inputs</h2>
+<table>
+<tr><th>Input</th><th class="num">Value</th><th>Source</th></tr>
+<tr><td>SSR (annualized)</td><td class="num">3.52%</td><td>sUSDS File("ssr"), rpow-annualized</td></tr>
+<tr><td>Spread owed to Sky</td><td class="num">+20 bps</td><td>strategy_cost_terms (brief)</td></tr>
+<tr><td>Cost rate on borrowed portion</td><td class="num">3.72%</td><td>SSR + spread</td></tr>
+<tr><td>SparkLend USDS borrow rate</td><td class="num">3.65%</td><td>ReserveDataUpdated</td></tr>
+<tr><td>Reserve factor</td><td class="num">10%</td><td>getReserveConfigurationData</td></tr>
+<tr><td>Utilization</td><td class="num">61.94%</td><td>totalSupply snapshots</td></tr>
+<tr><td>Supply rate (liquidityRate)</td><td class="num">2.03%</td><td>ReserveDataUpdated</td></tr>
+<tr><td>Deployed position</td><td class="num">1,000,595.86 USDS</td><td>scaled balance × liquidityIndex</td></tr>
+</table>
+
+<h2>Cumulative P&amp;L since inception (2026-07-24 entry)</h2>
+<table>
+<tr><th>Revenue (supply yield)</th><th>Cost (SSR+20bps × borrowed share)</th><th>Net</th></tr>
+<tr><td class="num">595.93 USDS</td>
+    <td class="num">675.20 USDS</td>
+    <td class="num bad"><strong>-79.28 USDS</strong></td></tr>
+</table>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 320" width="100%">
+  <style>
+  text { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 12px; fill: #768390; }
+  .title { font-size: 14px; font-weight: 600; }
+  .axis { stroke: #768390; stroke-width: 1; }
+  .grid { stroke: #768390; stroke-width: 0.5; opacity: 0.25; }
+  .rev { stroke: #4493f8; stroke-width: 1.8; fill: none; }
+  .cost { stroke: #d29922; stroke-width: 1.8; fill: none; }
+  .net { stroke: #f85149; stroke-width: 2.2; fill: none; }
+  .pos { fill: #3fb950; } .neg { fill: #f85149; }
+</style>
+  <text class="title" x="64" y="22">Cumulative revenue / cost / net (USDS)</text>
+  <line class="grid" x1="64" x2="896" y1="276" y2="276"/><text x="56" y="280" text-anchor="end">-200</text><line class="grid" x1="64" x2="896" y1="228.8" y2="228.8"/><text x="56" y="232.8" text-anchor="end">0</text><line class="grid" x1="64" x2="896" y1="181.6" y2="181.6"/><text x="56" y="185.6" text-anchor="end">200</text><line class="grid" x1="64" x2="896" y1="134.4" y2="134.4"/><text x="56" y="138.4" text-anchor="end">400</text><line class="grid" x1="64" x2="896" y1="87.19999999999999" y2="87.19999999999999"/><text x="56" y="91.19999999999999" text-anchor="end">600</text><line class="grid" x1="64" x2="896" y1="40" y2="40"/><text x="56" y="44" text-anchor="end">800</text><text x="98.66666666666666" y="294" text-anchor="middle">07-24</text><text x="168" y="294" text-anchor="middle">07-25</text><text x="237.33333333333334" y="294" text-anchor="middle">07-26</text><text x="306.6666666666667" y="294" text-anchor="middle">07-27</text><text x="376" y="294" text-anchor="middle">07-28</text><text x="445.3333333333333" y="294" text-anchor="middle">07-29</text><text x="514.6666666666666" y="294" text-anchor="middle">07-30</text><text x="584" y="294" text-anchor="middle">07-31</text><text x="653.3333333333334" y="294" text-anchor="middle">08-01</text><text x="722.6666666666666" y="294" text-anchor="middle">08-02</text><text x="792" y="294" text-anchor="middle">08-03</text><text x="861.3333333333334" y="294" text-anchor="middle">08-04</text>
+  <line class="axis" x1="64" x2="896" y1="276" y2="276"/>
+  <path class="rev" d="M98.7,220.3L168.0,207.2L237.3,194.0L306.7,180.9L376.0,167.7L445.3,154.6L514.7,141.4L584.0,128.2L653.3,115.1L722.7,101.9L792.0,88.7L861.3,88.2"/><path class="cost" d="M98.7,219.2L168.0,204.3L237.3,189.4L306.7,174.5L376.0,159.6L445.3,144.7L514.7,129.8L584.0,114.9L653.3,99.9L722.7,85.0L792.0,70.1L861.3,69.5"/><path class="net" d="M98.7,229.9L168.0,231.7L237.3,233.4L306.7,235.2L376.0,236.9L445.3,238.7L514.7,240.4L584.0,242.2L653.3,243.9L722.7,245.7L792.0,247.4L861.3,247.5"/><text x="676" y="22"><tspan fill="#4493f8">■ revenue</tspan>  <tspan fill="#d29922">■ cost</tspan>  <tspan fill="#f85149">■ net</tspan></text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 320" width="100%">
+  <style>
+  text { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 12px; fill: #768390; }
+  .title { font-size: 14px; font-weight: 600; }
+  .axis { stroke: #768390; stroke-width: 1; }
+  .grid { stroke: #768390; stroke-width: 0.5; opacity: 0.25; }
+  .rev { stroke: #4493f8; stroke-width: 1.8; fill: none; }
+  .cost { stroke: #d29922; stroke-width: 1.8; fill: none; }
+  .net { stroke: #f85149; stroke-width: 2.2; fill: none; }
+  .pos { fill: #3fb950; } .neg { fill: #f85149; }
+</style>
+  <text class="title" x="64" y="22">Daily margin (annualized bps on deployed position)</text>
+  <line class="grid" x1="64" x2="896" y1="276" y2="276"/><text x="56" y="280" text-anchor="end">-30</text><line class="grid" x1="64" x2="896" y1="197.33333333333334" y2="197.33333333333334"/><text x="56" y="201.33333333333334" text-anchor="end">-20</text><line class="grid" x1="64" x2="896" y1="118.66666666666669" y2="118.66666666666669"/><text x="56" y="122.66666666666669" text-anchor="end">-10</text><line class="grid" x1="64" x2="896" y1="40" y2="40"/><text x="56" y="44" text-anchor="end">0</text><text x="98.66666666666666" y="294" text-anchor="middle">07-24</text><text x="168" y="294" text-anchor="middle">07-25</text><text x="237.33333333333334" y="294" text-anchor="middle">07-26</text><text x="306.6666666666667" y="294" text-anchor="middle">07-27</text><text x="376" y="294" text-anchor="middle">07-28</text><text x="445.3333333333333" y="294" text-anchor="middle">07-29</text><text x="514.6666666666666" y="294" text-anchor="middle">07-30</text><text x="584" y="294" text-anchor="middle">07-31</text><text x="653.3333333333334" y="294" text-anchor="middle">08-01</text><text x="722.6666666666666" y="294" text-anchor="middle">08-02</text><text x="792" y="294" text-anchor="middle">08-03</text><text x="861.3333333333334" y="294" text-anchor="middle">08-04</text>
+  <line class="axis" x1="64" x2="896" y1="276" y2="276"/>
+  <rect class="neg" x="74.66666666666666" y="40" width="48" height="212.8400456"/><rect class="neg" x="144" y="40" width="48" height="212.865156"/><rect class="neg" x="213.33333333333334" y="40" width="48" height="212.86764186666667"/><rect class="neg" x="282.6666666666667" y="40" width="48" height="213.29549413333334"/><rect class="neg" x="352" y="40" width="48" height="212.83248573333333"/><rect class="neg" x="421.3333333333333" y="40" width="48" height="213.10864506666667"/><rect class="neg" x="490.66666666666663" y="40" width="48" height="212.86683159999998"/><rect class="neg" x="560" y="40" width="48" height="212.87989026666668"/><rect class="neg" x="629.3333333333334" y="40" width="48" height="212.91560493333336"/><rect class="neg" x="698.6666666666666" y="40" width="48" height="212.94720533333333"/><rect class="neg" x="768" y="40" width="48" height="212.9082024"/><rect class="neg" x="837.3333333333334" y="40" width="48" height="212.9626476"/></svg>
+
+<h2>Break-even</h2>
+<p><strong>Instantaneous view</strong> (hold everything else at current values):
+margin flips at utilization <strong>54.6%</strong>
+(current: 61.9% — above break-even, margin negative), or at SSR
+<strong>3.08%</strong> (current: 3.52%).
+This view is partial: it treats the supply rate as fixed while utilization moves.</p>
+<p><strong>Structural view</strong> (the real break-even):
+margin per unit deployed = u × [borrowRate × (1 − RF) − (SSR + 20bps)]
+= u × [3.65% × 0.90 − 3.72%]
+= u × <strong>-0.44%</strong>.
+Utilization only scales the magnitude — <em>only the bracketed rate spread flips the sign</em>.
+At current SSR the borrow rate must exceed <strong>4.13%</strong>
+(currently 3.65%); equivalently, at the current borrow rate the SSR must fall below
+<strong>3.08%</strong> (currently 3.52%).</p>
+
+<h2>Daily P&amp;L</h2>
+<table>
+<tr><th>Day (UTC)</th><th class="num">Revenue</th><th class="num">Cost</th><th class="num">Net</th><th class="num">Margin (bps ann.)</th><th class="num">Avg util</th></tr>
+<tr><td>2026-07-24</td>
+    <td class="num">35.8065</td>
+    <td class="num">40.5672</td>
+    <td class="num bad">-4.7608</td>
+    <td class="num bad">-27.1</td>
+    <td class="num">62.0%</td></tr>
+<tr><td>2026-07-25</td>
+    <td class="num">55.7541</td>
+    <td class="num">63.1682</td>
+    <td class="num bad">-7.4141</td>
+    <td class="num bad">-27.1</td>
+    <td class="num">62.0%</td></tr>
+<tr><td>2026-07-26</td>
+    <td class="num">55.7577</td>
+    <td class="num">63.1723</td>
+    <td class="num bad">-7.4146</td>
+    <td class="num bad">-27.1</td>
+    <td class="num">62.0%</td></tr>
+<tr><td>2026-07-27</td>
+    <td class="num">55.7246</td>
+    <td class="num">63.1546</td>
+    <td class="num bad">-7.4299</td>
+    <td class="num bad">-27.1</td>
+    <td class="num">62.0%</td></tr>
+<tr><td>2026-07-28</td>
+    <td class="num">55.7689</td>
+    <td class="num">63.1831</td>
+    <td class="num bad">-7.4142</td>
+    <td class="num bad">-27.1</td>
+    <td class="num">62.0%</td></tr>
+<tr><td>2026-07-29</td>
+    <td class="num">55.7493</td>
+    <td class="num">63.1736</td>
+    <td class="num bad">-7.4243</td>
+    <td class="num bad">-27.1</td>
+    <td class="num">62.0%</td></tr>
+<tr><td>2026-07-30</td>
+    <td class="num">55.7741</td>
+    <td class="num">63.1903</td>
+    <td class="num bad">-7.4163</td>
+    <td class="num bad">-27.1</td>
+    <td class="num">62.0%</td></tr>
+<tr><td>2026-07-31</td>
+    <td class="num">55.7768</td>
+    <td class="num">63.1939</td>
+    <td class="num bad">-7.4171</td>
+    <td class="num bad">-27.1</td>
+    <td class="num">62.0%</td></tr>
+<tr><td>2026-08-01</td>
+    <td class="num">55.7777</td>
+    <td class="num">63.1965</td>
+    <td class="num bad">-7.4188</td>
+    <td class="num bad">-27.1</td>
+    <td class="num">62.0%</td></tr>
+<tr><td>2026-08-02</td>
+    <td class="num">55.7793</td>
+    <td class="num">63.1996</td>
+    <td class="num bad">-7.4203</td>
+    <td class="num bad">-27.1</td>
+    <td class="num">62.0%</td></tr>
+<tr><td>2026-08-03</td>
+    <td class="num">55.7867</td>
+    <td class="num">63.2060</td>
+    <td class="num bad">-7.4193</td>
+    <td class="num bad">-27.1</td>
+    <td class="num">62.0%</td></tr>
+<tr><td>2026-08-04</td>
+    <td class="num">2.4709</td>
+    <td class="num">2.7997</td>
+    <td class="num bad">-0.3287</td>
+    <td class="num bad">-27.1</td>
+    <td class="num">62.0%</td></tr>
+</table>
+<p class="asof">Generated by <code>src/dashboard.ts</code> from reconciled Postgres state only —
+no live RPC calls at render time. Conventions: ASSUMPTIONS.md.</p>
+</body></html>

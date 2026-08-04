@@ -1,0 +1,110 @@
+# Daily index → accrue → reconcile → dashboard.
+#
+# Pattern carried over from susds-indexer: ephemeral Postgres service
+# container, pg_dump carried between runs via actions/cache (best-effort;
+# a cache miss re-indexes the whole range, ~10 min, loudly). Either way the
+# run is correct: the reconciliation gate re-verifies the full identities
+# against on-chain state at the pinned block, so a stale or corrupt restore
+# cannot produce a false PASS.
+#
+# The dashboard regenerates ONLY after the gate passed (reconcile exits 1
+# on any failed blocking check, which aborts the job and keeps the last
+# verified dashboard).
+
+name: index
+
+on:
+  schedule:
+    - cron: "23 4 * * *" # daily; odd minute to avoid the top-of-hour stampede
+  workflow_dispatch:
+
+jobs:
+  index-accrue-reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # contents: write is for the dashboard commit-back. Loop safety: no
+    # `push` trigger, and GITHUB_TOKEN pushes don't trigger workflows.
+    permissions:
+      contents: write
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: osero
+          POSTGRES_PASSWORD: osero
+          POSTGRES_DB: osero_margin
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U osero -d osero_margin"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 15
+
+    env:
+      # Repo secret if set; public keyless rotation otherwise. The || must
+      # live in the expression: an empty env var would NOT fall through to
+      # the in-code default (?? only catches undefined, not "").
+      RPC_URL: ${{ secrets.RPC_URL || '' }}
+      DATABASE_URL: postgres://osero:osero@localhost:5432/osero_margin
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Restore previous database dump
+        uses: actions/cache/restore@v4
+        with:
+          path: db.dump
+          key: osero-db-${{ github.run_id }}
+          restore-keys: osero-db-
+
+      - name: Load dump into service container
+        run: |
+          if [ -f db.dump ]; then
+            docker exec -i ${{ job.services.postgres.id }} pg_restore -U osero -d osero_margin < db.dump
+            echo "Restored previous dump; streams resume from sync_watermarks."
+          else
+            echo "No cached dump; full re-index from START_BLOCK."
+          fi
+
+      - name: Index the five raw streams to finalized
+        run: npx tsx src/index.ts
+
+      - name: Accrue segments + P&L
+        run: npx tsx src/accrue.ts
+
+      - name: Reconciliation gate (exits 1 on any failed blocking check)
+        run: npx tsx src/reconcile.ts
+
+      - name: Regenerate dashboard
+        run: npx tsx src/dashboard.ts
+
+      - name: Commit updated dashboard
+        run: |
+          if git diff --quiet -- dashboard/; then
+            echo "Dashboard unchanged; nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add dashboard/
+          git commit -m "Regenerate dashboard from reconciled data"
+          git pull --rebase origin main
+          git push
+
+      - name: Dump database for the next run
+        run: docker exec ${{ job.services.postgres.id }} pg_dump -U osero -Fc osero_margin > db.dump
+
+      - name: Save database dump to cache
+        uses: actions/cache/save@v4
+        with:
+          path: db.dump
+          key: osero-db-${{ github.run_id }}
