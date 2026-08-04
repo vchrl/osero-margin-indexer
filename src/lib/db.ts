@@ -205,10 +205,16 @@ CREATE TABLE IF NOT EXISTS ops_reconciliation_runs (
   actual       TEXT        NOT NULL,
   difference   TEXT        NOT NULL,
   tolerance    TEXT        NOT NULL,
-  status       TEXT        NOT NULL CHECK (status IN ('pass', 'fail')),
+  status       TEXT        NOT NULL,
   checked_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (run_id, check_name)
 );
+
+-- status values evolved (pass/fail -> +skipped); constraint maintained
+-- idempotently outside the CREATE so existing databases pick it up.
+ALTER TABLE ops_reconciliation_runs DROP CONSTRAINT IF EXISTS ops_reconciliation_runs_status_check;
+ALTER TABLE ops_reconciliation_runs ADD CONSTRAINT ops_reconciliation_runs_status_check
+  CHECK (status IN ('pass', 'fail', 'skipped'));
 
 INSERT INTO strategies (name, venue, chain_id, atoken, debt_token, rate_strategy)
 VALUES (

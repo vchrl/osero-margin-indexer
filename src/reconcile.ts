@@ -32,10 +32,12 @@ import { padHex, toFunctionSelector, stringToHex } from "viem";
 import { createPool } from "./lib/db.js";
 import { makeClient, callUint } from "./lib/client.js";
 import { rpow, RAY } from "./lib/rpow.js";
+import { writeFileSync, mkdirSync } from "node:fs";
 import {
-  ALM_PROXY, ALLOCATOR_BUFFER, ALLOCATOR_VAULT, MCD_VAT, SPARK_DATA_PROVIDER,
+  ALM_PROXY, ALLOCATOR_BUFFER, ALLOCATOR_VAULT, MCD_VAT, SPARK_POOL,
   SP_USDS, SUSDS, USDS,
 } from "./addresses.js";
+import { REQUIRED_CHECKS } from "./lib/checks.js";
 
 const YEAR = 31_536_000n;
 const ZERO = "0x0000000000000000000000000000000000000000";
@@ -47,6 +49,7 @@ interface CheckResult {
   actual: string;
   tolerance: string;
   blocking: boolean;
+  skipped?: boolean;
 }
 
 function abs(x: bigint): bigint { return x < 0n ? -x : x; }
@@ -64,9 +67,9 @@ async function main(): Promise<void> {
   const pinned = BigInt(accrualRun.pb);
 
   const strategyRow = await pool.query(
-    `SELECT id, debt_token, rate_strategy FROM strategies WHERE name = 'sparklend-usds'`,
+    `SELECT id, atoken, debt_token, rate_strategy FROM strategies WHERE name = 'sparklend-usds'`,
   );
-  const strategy = strategyRow.rows[0] as { id: number; debt_token: string; rate_strategy: string };
+  const strategy = strategyRow.rows[0] as { id: number; atoken: string; debt_token: string; rate_strategy: string };
 
   // Index for balance checks: the normalized (accrued-to-the-second) index
   // at the pin, captured by the accrual run in pin_snapshots.
@@ -84,7 +87,8 @@ async function main(): Promise<void> {
   {
     const flows = await pool.query(
       `SELECT COALESCE(SUM(CASE WHEN from_addr = $1 THEN amount ELSE -amount END), 0)::text AS net
-       FROM usds_transfers WHERE from_addr = $1 OR to_addr = $1`, [ZERO],
+       FROM usds_transfers WHERE (from_addr = $1 OR to_addr = $1) AND block_number <= $2`,
+      [ZERO, pinned.toString()],
     );
     // Mints are from 0x0 (draw), burns to 0x0 (repay/wipe).
     const netDrawn = BigInt((flows.rows[0] as { net: string }).net);
@@ -109,17 +113,11 @@ async function main(): Promise<void> {
     });
   }
 
-  // ── 2. scaled × index == balanceOf(ALM proxy) at idxBlock ───────────────
-  const scaledRow = await pool.query(
-    `SELECT COALESCE(SUM(CASE WHEN kind = 'supply' THEN (amount * 1e27::numeric) / liquidity_index_at
-                              ELSE -((amount * 1e27::numeric) / liquidity_index_at) END), 0)::numeric(78,0)::text AS s
-     FROM position_events WHERE strategy_id = $1`, [strategy.id],
-  );
-  // SQL division truncates differently than bigint floor for negatives; the
-  // single supply event makes this moot, but recompute in JS to be safe.
+  // ── 2. scaled × index == balanceOf(ALM proxy) at the pin ────────────────
   const posRows = await pool.query(
     `SELECT kind, amount::text AS a, liquidity_index_at::text AS i FROM position_events
-     WHERE strategy_id = $1 ORDER BY block_number, log_index`, [strategy.id],
+     WHERE strategy_id = $1 AND block_number <= $2 ORDER BY block_number, log_index`,
+    [strategy.id, pinned.toString()],
   );
   let scaled = 0n;
   let principal = 0n;
@@ -131,7 +129,6 @@ async function main(): Promise<void> {
     scaled += r.kind === "supply" ? sc : -sc;
     principal += r.kind === "supply" ? amt : -amt;
   }
-  void scaledRow;
   const balSelector = toFunctionSelector("balanceOf(address)");
   const balData = `0x${balSelector.slice(2)}${padHex(ALM_PROXY, { size: 32 }).slice(2)}` as `0x${string}`;
   const balanceAtIdx = await callUint(client, SP_USDS, balData, idxBlock);
@@ -156,25 +153,42 @@ async function main(): Promise<void> {
     tolerance: (BigInt(seg.n) + 2n).toString(), blocking: true,
   });
 
-  // ── 4. Segment continuity (pure SQL) ─────────────────────────────────────
-  const gaps = await pool.query(
-    `SELECT COUNT(*)::int AS n FROM (
-       SELECT t_end, LEAD(t_start) OVER (ORDER BY t_start) AS next_start
-       FROM accrual_segments WHERE strategy_id = $1
-     ) x WHERE next_start IS NOT NULL AND next_start <> t_end`, [strategy.id],
-  );
-  results.push({
-    name: "4_segment_continuity",
-    expected: "0", actual: String((gaps.rows[0] as { n: number }).n),
-    tolerance: "0", blocking: true,
-  });
+  // ── 4. Segment continuity AND coverage ──────────────────────────────────
+  // Adjacency alone would pass a timeline missing its head or tail; assert
+  // the segments exactly cover [inception, pin].
+  {
+    const gaps = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM (
+         SELECT t_end, LEAD(t_start) OVER (ORDER BY t_start) AS next_start
+         FROM accrual_segments WHERE strategy_id = $1
+       ) x WHERE next_start IS NOT NULL AND next_start <> t_end`, [strategy.id],
+    );
+    const span = (await pool.query(
+      `SELECT extract(epoch FROM min(t_start))::bigint::text AS t0,
+              extract(epoch FROM max(t_end))::bigint::text AS t1
+       FROM accrual_segments WHERE strategy_id = $1`, [strategy.id])).rows[0] as
+      { t0: string; t1: string };
+    const inception = (await pool.query(
+      `SELECT extract(epoch FROM min(b.block_timestamp))::bigint::text AS t
+       FROM position_events p JOIN blocks b USING (block_number)
+       WHERE p.strategy_id = $1 AND p.block_number <= $2`,
+      [strategy.id, pinned.toString()])).rows[0] as { t: string };
+    const pinTs = (await client.getBlock({ blockNumber: pinned })).timestamp;
+    results.push({
+      name: "4_segment_continuity_and_coverage",
+      expected: `cover=${inception.t}..${pinTs};gaps=0`,
+      actual: `cover=${span.t0}..${span.t1};gaps=${(gaps.rows[0] as { n: number }).n}`,
+      tolerance: "0", blocking: true,
+    });
+  }
 
   // ── 5. Buffer balance == net transfer flow into buffer ──────────────────
   {
     const buf = ALLOCATOR_BUFFER.toLowerCase();
     const flows = await pool.query(
       `SELECT COALESCE(SUM(CASE WHEN to_addr = $1 THEN amount ELSE -amount END), 0)::text AS net
-       FROM usds_transfers WHERE to_addr = $1 OR from_addr = $1`, [buf],
+       FROM usds_transfers WHERE (to_addr = $1 OR from_addr = $1) AND block_number <= $2`,
+      [buf, pinned.toString()],
     );
     const expectedBuf = BigInt((flows.rows[0] as { net: string }).net);
     const bufData = `0x${balSelector.slice(2)}${padHex(ALLOCATOR_BUFFER, { size: 32 }).slice(2)}` as `0x${string}`;
@@ -187,24 +201,37 @@ async function main(): Promise<void> {
   }
 
   // ── 6. Address regression guard ──────────────────────────────────────────
+  // Re-derives the WHOLE chain at run time — Pool → AddressesProvider →
+  // DataProvider → tokens/IRS — so a stale hardcoded DataProvider address
+  // cannot vouch for itself. Compares aToken, variable debt token and IRS.
   {
+    const addrAt = (data: `0x${string}` | undefined, word = 0) =>
+      `0x${data!.slice(2 + word * 64 + 24, 2 + (word + 1) * 64)}`;
     const usdsArg = padHex(USDS, { size: 32 }).slice(2);
+    const ap = addrAt((await client.call({
+      to: SPARK_POOL, data: toFunctionSelector("ADDRESSES_PROVIDER()"), blockNumber: pinned,
+    })).data);
+    const dp = addrAt((await client.call({
+      to: ap as `0x${string}`, data: toFunctionSelector("getPoolDataProvider()"), blockNumber: pinned,
+    })).data);
     const tokens = await client.call({
-      to: SPARK_DATA_PROVIDER,
+      to: dp as `0x${string}`,
       data: `0x${toFunctionSelector("getReserveTokensAddresses(address)").slice(2)}${usdsArg}` as `0x${string}`,
       blockNumber: pinned,
     });
-    const freshDebt = `0x${tokens.data!.slice(2 + 128 + 24, 2 + 192)}`;
+    const freshAtoken = addrAt(tokens.data, 0);
+    const freshDebt = addrAt(tokens.data, 2);
     const irs = await client.call({
-      to: SPARK_DATA_PROVIDER,
+      to: dp as `0x${string}`,
       data: `0x${toFunctionSelector("getInterestRateStrategyAddress(address)").slice(2)}${usdsArg}` as `0x${string}`,
       blockNumber: pinned,
     });
-    const freshIrs = `0x${irs.data!.slice(2 + 24, 2 + 64)}`;
-    const stored = `${strategy.debt_token.trim().toLowerCase()},${strategy.rate_strategy.trim().toLowerCase()}`;
+    const freshIrs = addrAt(irs.data, 0);
+    const stored = [strategy.atoken, strategy.debt_token, strategy.rate_strategy]
+      .map((a) => a.trim().toLowerCase()).join(",");
     results.push({
       name: "6_stored_addresses_eq_fresh_resolution",
-      expected: `${freshDebt},${freshIrs}`, actual: stored,
+      expected: `${freshAtoken},${freshDebt},${freshIrs}`, actual: stored,
       tolerance: "0", blocking: true,
     });
   }
@@ -215,7 +242,7 @@ async function main(): Promise<void> {
       `SELECT s.block_number::text AS bn, s.ssr::text AS ssr, s.chi::text AS chi,
               extract(epoch FROM b.block_timestamp)::bigint::text AS ts
        FROM ssr_changes s JOIN blocks b USING (block_number)
-       ORDER BY s.block_number`,
+       WHERE s.block_number <= $1 ORDER BY s.block_number`, [pinned.toString()],
     );
     const ssrs = rows.rows as { bn: string; ssr: string; chi: string; ts: string }[];
     if (ssrs.length >= 2) {
@@ -239,6 +266,15 @@ async function main(): Promise<void> {
         // points; composing one rpow over the whole interval differs by
         // accumulated per-drip rounding. ~1e10 ray units ≈ 1e-17 relative.
         tolerance: "10000000000", blocking: true,
+      });
+    } else {
+      // Fewer than two SSR observations: the recomputation has no interval
+      // to compound across. An explicit skipped row keeps the check present
+      // (the required-check registry treats absence as failure).
+      results.push({
+        name: "7_chi_rpow_recomputation",
+        expected: ">=2 ssr rows", actual: `${ssrs.length} row(s)`,
+        tolerance: "n/a", blocking: false, skipped: true,
       });
     }
   }
@@ -295,6 +331,16 @@ async function main(): Promise<void> {
     });
   }
 
+  // ── Required-check registry (item: a missing check must fail the gate) ──
+  for (const required of REQUIRED_CHECKS) {
+    if (!results.some((r) => r.name === required)) {
+      results.push({
+        name: required, expected: "present", actual: "MISSING",
+        tolerance: "0", blocking: true,
+      });
+    }
+  }
+
   // ── Persist + report ─────────────────────────────────────────────────────
   const pinnedHash = (await client.getBlock({ blockNumber: pinned })).hash;
   const c = await pool.connect();
@@ -307,6 +353,7 @@ async function main(): Promise<void> {
     );
     const runId = (run.rows[0] as { run_id: string }).run_id;
     console.log(`Reconcile run ${runId} pinned at block ${pinned}\n`);
+    const artifactChecks: object[] = [];
     for (const r of results) {
       const diff = abs(
         (/^-?\d+$/.test(r.expected) ? BigInt(r.expected) : 0n) -
@@ -315,9 +362,9 @@ async function main(): Promise<void> {
       const numeric = /^-?\d+$/.test(r.expected) && /^-?\d+$/.test(r.actual);
       // Non-numeric diagnostics are informational recordings (e.g. the
       // three utilization definitions): they cannot fail, only be read.
-      const pass = numeric ? diff <= BigInt(r.tolerance)
+      const pass = r.skipped ? true : numeric ? diff <= BigInt(r.tolerance)
         : r.blocking ? r.expected === r.actual : true;
-      const status = pass ? "pass" : "fail";
+      const status = r.skipped ? "skipped" : pass ? "pass" : "fail";
       if (!pass && r.blocking) failedBlocking++;
       await c.query(
         `INSERT INTO ops_reconciliation_runs
@@ -326,12 +373,29 @@ async function main(): Promise<void> {
         [runId, r.name, pinned.toString(), r.expected, r.actual,
          numeric ? diff.toString() : (pass ? "0" : "mismatch"), r.tolerance, status],
       );
-      const tag = r.blocking ? "" : " (diagnostic)";
-      console.log(`  ${pass ? "PASS" : "FAIL"}${tag}  ${r.name}`);
+      artifactChecks.push({
+        name: r.name, status, blocking: r.blocking, expected: r.expected,
+        actual: r.actual, difference: numeric ? diff.toString() : (pass ? "0" : "mismatch"),
+        tolerance: r.tolerance,
+      });
+      const tag = r.skipped ? " (skipped)" : r.blocking ? "" : " (diagnostic)";
+      console.log(`  ${status.toUpperCase()}${r.skipped ? "" : tag}  ${r.name}`);
       console.log(`        expected ${r.expected}`);
       console.log(`        actual   ${r.actual}  (tolerance ${r.tolerance})`);
     }
     await c.query("COMMIT");
+
+    // Committed JSON artifact next to the dashboard: the machine-readable
+    // twin of ops_reconciliation_runs for the latest run.
+    mkdirSync("dashboard", { recursive: true });
+    writeFileSync("dashboard/reconciliation.json", JSON.stringify({
+      run_id: Number(runId),
+      pinned_block: pinned.toString(),
+      pinned_block_hash: pinnedHash,
+      generated_at: new Date().toISOString(),
+      all_blocking_passed: failedBlocking === 0,
+      checks: artifactChecks,
+    }, null, 2) + "\n");
   } catch (error) {
     await c.query("ROLLBACK");
     throw error;

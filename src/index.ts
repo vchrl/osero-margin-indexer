@@ -197,13 +197,37 @@ interface StreamCounts {
   [stream: string]: number;
 }
 
+/**
+ * Reorg tripwire on resume: the stored watermark hash must match the chain's
+ * hash for that block before the stream continues. We only index finalized
+ * blocks, so a mismatch means the RPC served inconsistent data (or the DB
+ * was restored across networks) — refuse to extend a broken history.
+ */
+async function verifyWatermarkHash(
+  client: PublicClient,
+  source: string,
+  wm: { highestIndexedBlock: bigint; highestBlockHash: `0x${string}` },
+): Promise<void> {
+  const onchain = (await client.getBlock({ blockNumber: wm.highestIndexedBlock })).hash;
+  if (onchain.toLowerCase() !== wm.highestBlockHash.toLowerCase()) {
+    throw new Error(
+      `[${source}] watermark hash mismatch at block ${wm.highestIndexedBlock}: ` +
+        `stored ${wm.highestBlockHash}, chain ${onchain}. Finalized history should ` +
+        `never diverge — refusing to resume.`,
+    );
+  }
+}
+
 async function streamStart(
+  client: PublicClient,
   pool: pg.Pool,
   source: string,
   defaultStart: bigint,
 ): Promise<bigint> {
   const wm = await getWatermark(pool, source);
-  return wm === null ? defaultStart : wm.highestIndexedBlock + 1n;
+  if (wm === null) return defaultStart;
+  await verifyWatermarkHash(client, source, wm);
+  return wm.highestIndexedBlock + 1n;
 }
 
 /** Stream 1: SSR changes from File("ssr") + seed row at range start. */
@@ -214,7 +238,7 @@ async function indexSsr(
   endBlock: bigint,
   counts: StreamCounts,
 ): Promise<void> {
-  const from = await streamStart(pool, "ssr", startBlock);
+  const from = await streamStart(client, pool, "ssr", startBlock);
   if (from > endBlock) return;
 
   // Seed: the SSR in force at range start predates any File event inside the
@@ -277,7 +301,7 @@ async function indexReserve(
   endBlock: bigint,
   counts: StreamCounts,
 ): Promise<void> {
-  const from = await streamStart(pool, "reserve", startBlock);
+  const from = await streamStart(client, pool, "reserve", startBlock);
   if (from > endBlock) return;
   const filters: LogFilter[] = [
     { address: SPARK_POOL, topics: [TOPIC_RESERVE_DATA_UPDATED, topicAddr(USDS)] },
@@ -324,7 +348,7 @@ async function indexPosition(
   strategyId: number,
   counts: StreamCounts,
 ): Promise<void> {
-  const from = await streamStart(pool, "position", startBlock);
+  const from = await streamStart(client, pool, "position", startBlock);
   if (from > endBlock) return;
   // Supply: onBehalfOf is topic2; Withdraw: user is topic2. Both must be the
   // ALM proxy for the event to be Osero's.
@@ -349,15 +373,19 @@ async function indexPosition(
       await insertBlocks(c, blockRows);
       for (const r of rows) {
         // Aave updates reserve state (emitting ReserveDataUpdated) in the
-        // same tx as any supply/withdraw; stream 2 has already persisted it.
+        // same TRANSACTION as any supply/withdraw, before the Supply/
+        // Withdraw event; stream 2 has already persisted it. Match on the
+        // tx hash, not last-in-block — another protocol touching the USDS
+        // reserve later in the same block must not donate its index.
         const idx = await c.query(
           `SELECT liquidity_index::text AS li FROM reserve_updates
-           WHERE block_number = $1 ORDER BY log_index DESC LIMIT 1`,
-          [r.blockNumber.toString()],
+           WHERE block_number = $1 AND transaction_hash = $2 AND log_index < $3
+           ORDER BY log_index DESC LIMIT 1`,
+          [r.blockNumber.toString(), r.transactionHash, r.logIndex],
         );
         if (idx.rows.length === 0) {
           throw new Error(
-            `No reserve_updates row at block ${r.blockNumber} for position event ` +
+            `No same-tx reserve_updates row before log ${r.logIndex} of ` +
               `${r.transactionHash}; run order violated or reserve stream incomplete.`,
           );
         }
@@ -385,7 +413,7 @@ async function indexTransfers(
   endBlock: bigint,
   counts: StreamCounts,
 ): Promise<void> {
-  const from = await streamStart(pool, "transfers", startBlock);
+  const from = await streamStart(client, pool, "transfers", startBlock);
   if (from > endBlock) return;
   const tracked = [topicAddr(ALM_PROXY), topicAddr(ALLOCATOR_BUFFER)];
   // Two filters (from-side, to-side); the walker dedupes internal transfers
@@ -440,6 +468,7 @@ async function indexSnapshots(
   counts: StreamCounts,
 ): Promise<void> {
   const wm = await getWatermark(pool, "snapshots");
+  if (wm !== null) await verifyWatermarkHash(client, "snapshots", wm);
   const res = await pool.query(
     `SELECT DISTINCT block_number AS bn FROM reserve_updates
      WHERE block_number > $1 ORDER BY block_number`,

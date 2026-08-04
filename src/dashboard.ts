@@ -26,6 +26,7 @@ import "./lib/env.js";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createPool } from "./lib/db.js";
 import { rpow, RAY } from "./lib/rpow.js";
+import { REQUIRED_CHECKS } from "./lib/checks.js";
 
 const YEAR_S = 31_536_000;
 
@@ -165,6 +166,13 @@ async function main(): Promise<void> {
   const failed = checks.filter((c) => c.status === "fail" && !c.check_name.includes("DIAGNOSTIC"));
   if (failed.length > 0) {
     throw new Error(`Reconciliation gate failed (${failed.map((c) => c.check_name).join(", ")}); refusing to render.`);
+  }
+  // Presence assertion: a check that silently didn't run must block the
+  // render exactly like a failing one.
+  const present = new Set(checks.map((c) => c.check_name));
+  const missing = REQUIRED_CHECKS.filter((n) => !present.has(n));
+  if (missing.length > 0) {
+    throw new Error(`Reconcile run ${reconcile.run_id} is missing required checks: ${missing.join(", ")}; refusing to render.`);
   }
 
   // ── Inputs ───────────────────────────────────────────────────────────────
