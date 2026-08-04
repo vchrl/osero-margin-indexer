@@ -3,172 +3,412 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Osero margin — SparkLend USDS</title>
 <style>
-  :root { color-scheme: light dark; }
-  body { font-family: ui-sans-serif, system-ui, sans-serif; max-width: 960px; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
-  h1 { font-size: 1.4rem; } h2 { font-size: 1.1rem; margin-top: 2rem; }
-  .headline { border: 2px solid #f85149; border-radius: 8px; padding: 1rem 1.4rem; margin: 1.2rem 0; }
-  .headline .big { font-size: 1.6rem; font-weight: 700; color: #f85149; }
-  table { border-collapse: collapse; width: 100%; margin: .8rem 0; }
-  th, td { padding: .35rem .6rem; border-bottom: 1px solid #76839044; text-align: left; }
-  .num { text-align: right; font-variant-numeric: tabular-nums; }
-  .good { color: #3fb950; } .bad { color: #f85149; }
-  .asof { opacity: .7; font-size: .85rem; }
-  code { font-size: .9em; }
+  :root {
+    --bg: #050505; --card: #0d0d0d; --subtle: #080808;
+    --fg: rgba(255,255,255,.95); --muted-fg: rgba(255,255,255,.53); --border: rgba(255,255,255,.08);
+    --accent-bg: #242424; --brand: #1857ec;
+    --success: #0bba71; --destructive: #f43f5e; --warning: #f0bf0d;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font-family: "Innovator Grotesk", Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 14px; line-height: 1.55;
+    max-width: 960px; margin: 0 auto; padding: 2.5rem 1.25rem 4rem;
+  }
+  h1 { font-size: 1.75rem; font-weight: 600; letter-spacing: -.02em; }
+  h2 { font-size: 1rem; font-weight: 600; letter-spacing: -.01em; margin-bottom: .9rem; }
+  h3 { font-size: .85rem; font-weight: 600; margin: .8rem 0 .3rem; color: var(--fg); }
+  .muted { color: var(--muted-fg); }
+  .good { color: var(--success); } .bad { color: var(--destructive); }
+  code { font-family: "Geist Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85em; }
+  a { color: var(--brand); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a code { color: inherit; }
+
+  .gate {
+    display: inline-flex; align-items: center; gap: .5rem;
+    background: var(--card); border: 1px solid var(--border); border-radius: 9999px;
+    padding: .3rem .9rem; margin: .9rem 0 1.4rem; font-size: .8rem; color: var(--muted-fg);
+  }
+  .gate .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); }
+
+  .headline {
+    background: linear-gradient(180deg, color-mix(in srgb, #f43f5e 9%, var(--card)), var(--card));
+    border: 1px solid color-mix(in srgb, #f43f5e 55%, transparent);
+    border-radius: 1rem; padding: 1.5rem 1.75rem; margin-bottom: 1.25rem;
+  }
+  .headline .big { font-size: 2rem; font-weight: 700; letter-spacing: -.03em; color: #f43f5e; }
+  .headline .sub { color: var(--muted-fg); margin-top: .35rem; }
+  .headline .sub strong { color: var(--fg); font-variant-numeric: tabular-nums; }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: .875rem;
+    padding: 1.4rem 1.6rem; margin-bottom: 1.25rem;
+  }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: .75rem; margin-bottom: 1.1rem; }
+  .stat { background: var(--subtle); border: 1px solid var(--border); border-radius: .5rem; padding: .8rem 1rem; }
+  .stat .k { font-size: .75rem; color: var(--muted-fg); text-transform: uppercase; letter-spacing: .05em; }
+  .stat .v { font-family: "Geist Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1.25rem; font-weight: 600; margin-top: .15rem; font-variant-numeric: tabular-nums; }
+
+  table { border-collapse: collapse; width: 100%; }
+  th { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted-fg); font-weight: 500; }
+  th, td { padding: .5rem .65rem; border-bottom: 1px solid var(--border); text-align: left; }
+  tbody tr:hover { background: rgba(255,255,255,.025); }
+  tr:last-child td { border-bottom: none; }
+  .num { text-align: right; font-family: "Geist Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .82rem; font-variant-numeric: tabular-nums; }
+
+  .legend { display: flex; gap: 1.2rem; font-size: .78rem; color: var(--muted-fg); margin-bottom: .4rem; }
+  .legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: .4rem; vertical-align: -1px; }
+
+  svg text { font-family: "Innovator Grotesk", Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  svg .tick { font-size: 11px; fill: var(--muted-fg); }
+  svg .grid { stroke: rgba(255,255,255,.06); stroke-width: 1; }
+  svg .zero { stroke: rgba(255,255,255,.35); stroke-width: 1; stroke-dasharray: 2 3; }
+  svg .axisline { stroke: rgba(255,255,255,.14); stroke-width: 1; }
+  svg .line-rev { stroke: var(--brand); stroke-width: 2; fill: none; }
+  svg .line-cost { stroke: var(--warning); stroke-width: 2; fill: none; }
+  svg .line-net { stroke: var(--destructive); stroke-width: 2.4; fill: none; }
+  svg .line-util { stroke: var(--brand); stroke-width: 1.8; fill: none; stroke-dasharray: 5 3; }
+  svg .barpos { fill: var(--success); } svg .barneg { fill: var(--destructive); }
+  svg .crosshair { stroke: rgba(255,255,255,.4); stroke-width: 1; stroke-dasharray: 3 3; pointer-events: none; }
+  svg .gapshade { fill: color-mix(in srgb, var(--destructive) 10%, transparent); }
+  svg .mark-cur { stroke: var(--warning); stroke-width: 1.4; stroke-dasharray: 4 3; }
+  svg .mark-be { stroke: var(--success); stroke-width: 1.4; stroke-dasharray: 4 3; }
+  svg .marklabel { font-size: 11px; }
+  svg .mark-cur-t { fill: var(--warning); } svg .mark-be-t { fill: var(--success); }
+
+  #tooltip {
+    position: fixed; display: none; pointer-events: none; z-index: 10;
+    background: var(--accent-bg); border: 1px solid var(--border); border-radius: .5rem;
+    padding: .5rem .75rem; font-size: .78rem; font-family: "Geist Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    box-shadow: 0 .625rem 1rem 0 rgba(0,0,0,.5); white-space: pre; line-height: 1.6;
+  }
+  #tooltip .t0 { color: var(--muted-fg); }
+
+  details.method { border-top: 1px solid var(--border); margin-top: 1.1rem; padding-top: .7rem; }
+  details.method summary {
+    cursor: pointer; list-style: none; font-size: .8rem; color: var(--muted-fg);
+    display: flex; align-items: center; gap: .45rem; user-select: none;
+  }
+  details.method summary::before { content: ""; width: 7px; height: 7px; border-right: 1.5px solid var(--muted-fg); border-bottom: 1.5px solid var(--muted-fg); transform: rotate(-45deg); transition: transform .2s ease-out; }
+  details.method[open] summary::before { transform: rotate(45deg); }
+  .method-body { font-size: .82rem; color: var(--muted-fg); margin-top: .6rem; }
+  .method-body p { margin-bottom: .5rem; } .method-body p:last-child { margin-bottom: 0; }
+  .method-body code { color: var(--fg); }
+  .method-body ul { margin: .3rem 0 .5rem 1.1rem; }
+  .method-body h3 { margin-top: .9rem; }
+  .footer { color: var(--muted-fg); font-size: .78rem; margin-top: 1.5rem; }
+  @media (max-width: 640px) { .stats { grid-template-columns: 1fr; } }
 </style></head><body>
-<h1>Is Osero making money? — SparkLend USDS strategy</h1>
-<p class="asof">Data as of block <strong>25678138</strong>
- (0x61dea991fd31…), computed 2026-08-04T02:07:54.135Z,
- reconcile run 3: all blocking checks passed.</p>
+
+<h1>Is Osero making money?</h1>
+<div class="gate"><span class="dot"></span>
+  data as of block <a href="https://etherscan.io/block/25678138" target="_blank" rel="noopener">25678138</a> · reconcile run 3 · all blocking checks passed
+</div>
 
 <div class="headline">
   <div class="big">NO — net -79.28 USDS since inception</div>
-  <div>Annualized margin ≈ <strong>-27.1 bps</strong> on the deployed position
+  <div class="sub">Annualized margin ≈ <strong>-27.1 bps</strong> on the deployed position
    · losing ≈ <strong>$7.42/day</strong>
-   over 10.7 days</div>
+   over <strong>10.7</strong> days (SparkLend USDS, entered 2026-07-24)</div>
+  <details class="method"><summary>Methodology</summary><div class="method-body">
+    <p>Net = cumulative revenue − cumulative cost since the <a href="https://etherscan.io/tx/0xff40710593559c22a5a795dd4725a1a12447d350f28564d16fe732ba3d1c19f3" target="_blank" rel="noopener"><code>1,000,000 USDS entry</code></a>
+    at block <a href="https://etherscan.io/block/25601435" target="_blank" rel="noopener">25601435</a>. Annualized margin = net ÷ position × (365 ÷ 10.7 days) in bps.
+    Per-day = net ÷ elapsed days. Position basis is the <a href="https://etherscan.io/address/0xC02aB1A5eaA8d1B114EF786D9bde108cD4364359" target="_blank" rel="noopener"><code>spUSDS</code></a> balance
+    (scaled balance × current liquidityIndex).</p>
+  </div></details>
 </div>
 
-<h2>Current inputs</h2>
-<table>
+<section class="card">
+  <h2>Cumulative P&amp;L since inception</h2>
+  
+<div class="stats">
+  <div class="stat"><div class="k">Revenue (supply yield)</div><div class="v">595.93 <span class="muted">USDS</span></div></div>
+  <div class="stat"><div class="k">Cost (SSR+20bps × borrowed)</div><div class="v">675.20 <span class="muted">USDS</span></div></div>
+  <div class="stat"><div class="k">Net</div><div class="v bad">-79.28 <span class="muted">USDS</span></div></div>
+</div>
+<div class="legend"><span><span class="sw" style="background:#1857ec"></span>revenue</span>
+<span><span class="sw" style="background:#f0bf0d"></span>cost</span>
+<span><span class="sw" style="background:#f43f5e"></span>net</span></div>
+<svg id="chart-cum" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 300" width="100%">
+  <line class="grid" x1="64" x2="824" y1="260.0" y2="260.0"/><text class="tick" x="54" y="264.0" text-anchor="end">-200</text><line class="grid" x1="64" x2="824" y1="212.0" y2="212.0"/><text class="tick" x="54" y="216.0" text-anchor="end">0</text><line class="grid" x1="64" x2="824" y1="164.0" y2="164.0"/><text class="tick" x="54" y="168.0" text-anchor="end">200</text><line class="grid" x1="64" x2="824" y1="116.0" y2="116.0"/><text class="tick" x="54" y="120.0" text-anchor="end">400</text><line class="grid" x1="64" x2="824" y1="68.0" y2="68.0"/><text class="tick" x="54" y="72.0" text-anchor="end">600</text><line class="grid" x1="64" x2="824" y1="20.0" y2="20.0"/><text class="tick" x="54" y="24.0" text-anchor="end">800</text><line class="zero" x1="64" x2="824" y1="212.0" y2="212.0"/><text class="tick" transform="rotate(-90)" x="-140" y="14" text-anchor="middle">USDS (cumulative)</text><text class="tick" x="95.7" y="280" text-anchor="middle">07-24</text><text class="tick" x="159.0" y="280" text-anchor="middle">07-25</text><text class="tick" x="222.3" y="280" text-anchor="middle">07-26</text><text class="tick" x="285.7" y="280" text-anchor="middle">07-27</text><text class="tick" x="349.0" y="280" text-anchor="middle">07-28</text><text class="tick" x="412.3" y="280" text-anchor="middle">07-29</text><text class="tick" x="475.7" y="280" text-anchor="middle">07-30</text><text class="tick" x="539.0" y="280" text-anchor="middle">07-31</text><text class="tick" x="602.3" y="280" text-anchor="middle">08-01</text><text class="tick" x="665.7" y="280" text-anchor="middle">08-02</text><text class="tick" x="729.0" y="280" text-anchor="middle">08-03</text><text class="tick" x="792.3" y="280" text-anchor="middle">08-04*</text>
+  <line class="axisline" x1="64" x2="824" y1="260" y2="260"/>
+  <path class="line-rev" d="M95.7,203.4L159.0,190.0L222.3,176.6L285.7,163.3L349.0,149.9L412.3,136.5L475.7,123.1L539.0,109.7L602.3,96.3L665.7,83.0L729.0,69.6L792.3,69.0"/><path class="line-cost" d="M95.7,202.3L159.0,187.1L222.3,171.9L285.7,156.8L349.0,141.6L412.3,126.5L475.7,111.3L539.0,96.1L602.3,81.0L665.7,65.8L729.0,50.6L792.3,50.0"/><path class="line-net" d="M95.7,213.1L159.0,214.9L222.3,216.7L285.7,218.5L349.0,220.3L412.3,222.0L475.7,223.8L539.0,225.6L602.3,227.4L665.7,229.2L729.0,230.9L792.3,231.0"/>
+  <line class="crosshair" x1="0" x2="0" y1="20" y2="260" style="display:none"/>
+  <rect class="hover" x="64" y="20" width="760" height="240" fill="transparent"/>
+</svg>
+  <details class="method"><summary>Methodology</summary><div class="method-body">
+  <p><strong>Revenue</strong> is liquidityIndex ratio growth on Osero's scaled
+  aToken balance: per segment, <code>S × (index_end − index_start)</code>.
+  Summing telescopes to the balance identity — reconcile checks #2/#3 assert
+  it against <code>spUSDS.balanceOf</code> on-chain to within wei rounding.</p>
+  <p><strong>Cost</strong> is <code>(annualized SSR + 20bps) × position ×
+  utilization</code> integrated over piecewise-constant segments whose
+  boundaries are every SSR change, reserve update, and position event.
+  The +20bps is modeled as a linear annual spread (the brief does not
+  specify compounding; see the Assumptions accordion below) and lives in
+  <code>strategy_cost_terms</code> as data, not code.</p></div></details>
+</section>
+
+<section class="card">
+  <h2>Daily margin <span class="muted" style="font-weight:400;font-size:.8rem">— * 2026-08-04 is a partial day</span></h2>
+  
+<div class="legend"><span><span class="sw" style="background:#f43f5e"></span>daily margin (left, bps ann.)</span>
+<span><span class="sw" style="background:#1857ec;height:3px;margin-bottom:3px"></span>avg utilization (right)</span></div>
+<svg id="chart-margin" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 300" width="100%">
+  <line class="grid" x1="64" x2="824" y1="260.0" y2="260.0"/><text class="tick" x="54" y="264.0" text-anchor="end">-30</text><line class="grid" x1="64" x2="824" y1="180.0" y2="180.0"/><text class="tick" x="54" y="184.0" text-anchor="end">-20</text><line class="grid" x1="64" x2="824" y1="100.0" y2="100.0"/><text class="tick" x="54" y="104.0" text-anchor="end">-10</text><line class="grid" x1="64" x2="824" y1="20.0" y2="20.0"/><text class="tick" x="54" y="24.0" text-anchor="end">0</text><text class="tick" x="834" y="264.0" text-anchor="start">0%</text><text class="tick" x="834" y="204.0" text-anchor="start">25%</text><text class="tick" x="834" y="144.0" text-anchor="start">50%</text><text class="tick" x="834" y="84.0" text-anchor="start">75%</text><text class="tick" x="834" y="24.0" text-anchor="start">100%</text><text class="tick" transform="rotate(90)" x="140" y="-868" text-anchor="middle">avg utilization</text><text class="tick" transform="rotate(-90)" x="-140" y="14" text-anchor="middle">bps (annualized)</text><text class="tick" x="95.7" y="280" text-anchor="middle">07-24</text><text class="tick" x="159.0" y="280" text-anchor="middle">07-25</text><text class="tick" x="222.3" y="280" text-anchor="middle">07-26</text><text class="tick" x="285.7" y="280" text-anchor="middle">07-27</text><text class="tick" x="349.0" y="280" text-anchor="middle">07-28</text><text class="tick" x="412.3" y="280" text-anchor="middle">07-29</text><text class="tick" x="475.7" y="280" text-anchor="middle">07-30</text><text class="tick" x="539.0" y="280" text-anchor="middle">07-31</text><text class="tick" x="602.3" y="280" text-anchor="middle">08-01</text><text class="tick" x="665.7" y="280" text-anchor="middle">08-02</text><text class="tick" x="729.0" y="280" text-anchor="middle">08-03</text><text class="tick" x="792.3" y="280" text-anchor="middle">08-04*</text>
+  <line class="axisline" x1="64" x2="824" y1="260" y2="260"/>
+  <rect class="barneg" rx="2" x="74.8" y="20.0" width="41.8" height="216.4"/><rect class="barneg" rx="2" x="138.1" y="20.0" width="41.8" height="216.5"/><rect class="barneg" rx="2" x="201.4" y="20.0" width="41.8" height="216.5"/><rect class="barneg" rx="2" x="264.8" y="20.0" width="41.8" height="216.9"/><rect class="barneg" rx="2" x="328.1" y="20.0" width="41.8" height="216.4"/><rect class="barneg" rx="2" x="391.4" y="20.0" width="41.8" height="216.7"/><rect class="barneg" rx="2" x="454.8" y="20.0" width="41.8" height="216.5"/><rect class="barneg" rx="2" x="518.1" y="20.0" width="41.8" height="216.5"/><rect class="barneg" rx="2" x="581.4" y="20.0" width="41.8" height="216.5"/><rect class="barneg" rx="2" x="644.8" y="20.0" width="41.8" height="216.6"/><rect class="barneg" rx="2" x="708.1" y="20.0" width="41.8" height="216.5"/><rect class="barneg" rx="2" x="771.4" y="20.0" width="41.8" height="216.6"/><path class="line-util" d="M95.7,111.3L159.0,111.3L222.3,111.3L285.7,111.3L349.0,111.2L412.3,111.3L475.7,111.2L539.0,111.2L602.3,111.2L665.7,111.3L729.0,111.2L792.3,111.2"/>
+  <line class="crosshair" x1="0" x2="0" y1="20" y2="260" style="display:none"/>
+  <rect class="hover" x="64" y="20" width="760" height="240" fill="transparent"/>
+</svg>
+  <details class="method"><summary>Methodology</summary><div class="method-body">
+  <p>Bars: each UTC day's net (revenue − cost) annualized against the
+  end-of-day position, in bps (left axis). Line: that day's time-weighted
+  average utilization (right axis) — the bars are flat because utilization
+  and rates have been flat; margin moves only when those inputs move.
+  Segments are split at UTC midnights; within a segment accrual is linear
+  in time, so day attribution is exact under the model. The final day
+  covers only the hours up to the pinned block and is marked partial —
+  its bar is an annualized rate, so it is comparable, just noisier.</p></div></details>
+</section>
+
+<section class="card">
+  <h2>Current inputs</h2>
+  <table>
 <tr><th>Input</th><th class="num">Value</th><th>Source</th></tr>
-<tr><td>SSR (annualized)</td><td class="num">3.52%</td><td>sUSDS File("ssr"), rpow-annualized</td></tr>
-<tr><td>Spread owed to Sky</td><td class="num">+20 bps</td><td>strategy_cost_terms (brief)</td></tr>
-<tr><td>Cost rate on borrowed portion</td><td class="num">3.72%</td><td>SSR + spread</td></tr>
-<tr><td>SparkLend USDS borrow rate</td><td class="num">3.65%</td><td>ReserveDataUpdated</td></tr>
-<tr><td>Reserve factor</td><td class="num">10%</td><td>getReserveConfigurationData</td></tr>
-<tr><td>Utilization</td><td class="num">61.94%</td><td>totalSupply snapshots</td></tr>
-<tr><td>Supply rate (liquidityRate)</td><td class="num">2.03%</td><td>ReserveDataUpdated</td></tr>
-<tr><td>Deployed position</td><td class="num">1,000,595.86 USDS</td><td>scaled balance × liquidityIndex</td></tr>
+<tr><td>SSR (annualized)</td><td class="num">3.52%</td><td class="muted">sUSDS File("ssr"), rpow-annualized</td></tr>
+<tr><td>Spread owed to Sky</td><td class="num">+20 bps</td><td class="muted">strategy_cost_terms (brief)</td></tr>
+<tr><td>Cost rate on borrowed portion</td><td class="num">3.72%</td><td class="muted">SSR + spread</td></tr>
+<tr><td>SparkLend USDS borrow rate</td><td class="num">3.65%</td><td class="muted">ReserveDataUpdated</td></tr>
+<tr><td>Reserve factor</td><td class="num">10%</td><td class="muted">getReserveConfigurationData</td></tr>
+<tr><td>Utilization</td><td class="num">61.94%</td><td class="muted">totalSupply snapshots</td></tr>
+<tr><td>Supply rate (liquidityRate)</td><td class="num">2.03%</td><td class="muted">ReserveDataUpdated</td></tr>
+<tr><td>Deployed position</td><td class="num">1,000,595.86 USDS</td><td class="muted">scaled balance × liquidityIndex</td></tr>
 </table>
+  <details class="method"><summary>Methodology</summary><div class="method-body">
+  <p>All inputs come from the indexed Postgres state at the pinned block —
+  the dashboard makes no RPC calls. SSR is the per-second ray rate from
+  <a href="https://etherscan.io/address/0xa3931d71877C0E7a3148CB7Eb4463524FEc27fbD" target="_blank" rel="noopener"><code>sUSDS</code></a> <code>File("ssr")</code>
+  events, annualized with MakerDAO's exact bigint <code>rpow</code>.
+  Utilization = <a href="https://etherscan.io/address/0x8c147debea24Fb98ade8dDa4bf142992928b449e" target="_blank" rel="noopener"><code>variableDebtUSDS</code></a>.totalSupply ÷
+  <a href="https://etherscan.io/address/0xC02aB1A5eaA8d1B114EF786D9bde108cD4364359" target="_blank" rel="noopener"><code>spUSDS</code></a>.totalSupply from archive snapshots
+  (stable debt verified zero and disabled). Reserve factor read from
+  <code>getReserveConfigurationData(USDS)</code>; rate curve from the
+  <a href="https://etherscan.io/address/0x8a95998639A34462A1FdAaaA5506F66F90Ef2fDd" target="_blank" rel="noopener"><code>interest rate strategy</code></a> contract.</p></div></details>
+</section>
 
-<h2>Cumulative P&amp;L since inception (2026-07-24 entry)</h2>
-<table>
-<tr><th>Revenue (supply yield)</th><th>Cost (SSR+20bps × borrowed share)</th><th>Net</th></tr>
-<tr><td class="num">595.93 USDS</td>
-    <td class="num">675.20 USDS</td>
-    <td class="num bad"><strong>-79.28 USDS</strong></td></tr>
-</table>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 320" width="100%">
-  <style>
-  text { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 12px; fill: #768390; }
-  .title { font-size: 14px; font-weight: 600; }
-  .axis { stroke: #768390; stroke-width: 1; }
-  .grid { stroke: #768390; stroke-width: 0.5; opacity: 0.25; }
-  .rev { stroke: #4493f8; stroke-width: 1.8; fill: none; }
-  .cost { stroke: #d29922; stroke-width: 1.8; fill: none; }
-  .net { stroke: #f85149; stroke-width: 2.2; fill: none; }
-  .pos { fill: #3fb950; } .neg { fill: #f85149; }
-</style>
-  <text class="title" x="64" y="22">Cumulative revenue / cost / net (USDS)</text>
-  <line class="grid" x1="64" x2="896" y1="276" y2="276"/><text x="56" y="280" text-anchor="end">-200</text><line class="grid" x1="64" x2="896" y1="228.8" y2="228.8"/><text x="56" y="232.8" text-anchor="end">0</text><line class="grid" x1="64" x2="896" y1="181.6" y2="181.6"/><text x="56" y="185.6" text-anchor="end">200</text><line class="grid" x1="64" x2="896" y1="134.4" y2="134.4"/><text x="56" y="138.4" text-anchor="end">400</text><line class="grid" x1="64" x2="896" y1="87.19999999999999" y2="87.19999999999999"/><text x="56" y="91.19999999999999" text-anchor="end">600</text><line class="grid" x1="64" x2="896" y1="40" y2="40"/><text x="56" y="44" text-anchor="end">800</text><text x="98.66666666666666" y="294" text-anchor="middle">07-24</text><text x="168" y="294" text-anchor="middle">07-25</text><text x="237.33333333333334" y="294" text-anchor="middle">07-26</text><text x="306.6666666666667" y="294" text-anchor="middle">07-27</text><text x="376" y="294" text-anchor="middle">07-28</text><text x="445.3333333333333" y="294" text-anchor="middle">07-29</text><text x="514.6666666666666" y="294" text-anchor="middle">07-30</text><text x="584" y="294" text-anchor="middle">07-31</text><text x="653.3333333333334" y="294" text-anchor="middle">08-01</text><text x="722.6666666666666" y="294" text-anchor="middle">08-02</text><text x="792" y="294" text-anchor="middle">08-03</text><text x="861.3333333333334" y="294" text-anchor="middle">08-04</text>
-  <line class="axis" x1="64" x2="896" y1="276" y2="276"/>
-  <path class="rev" d="M98.7,220.3L168.0,207.2L237.3,194.0L306.7,180.9L376.0,167.7L445.3,154.6L514.7,141.4L584.0,128.2L653.3,115.1L722.7,101.9L792.0,88.7L861.3,88.2"/><path class="cost" d="M98.7,219.2L168.0,204.3L237.3,189.4L306.7,174.5L376.0,159.6L445.3,144.7L514.7,129.8L584.0,114.9L653.3,99.9L722.7,85.0L792.0,70.1L861.3,69.5"/><path class="net" d="M98.7,229.9L168.0,231.7L237.3,233.4L306.7,235.2L376.0,236.9L445.3,238.7L514.7,240.4L584.0,242.2L653.3,243.9L722.7,245.7L792.0,247.4L861.3,247.5"/><text x="676" y="22"><tspan fill="#4493f8">■ revenue</tspan>  <tspan fill="#d29922">■ cost</tspan>  <tspan fill="#f85149">■ net</tspan></text></svg>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 320" width="100%">
-  <style>
-  text { font-family: ui-sans-serif, system-ui, sans-serif; font-size: 12px; fill: #768390; }
-  .title { font-size: 14px; font-weight: 600; }
-  .axis { stroke: #768390; stroke-width: 1; }
-  .grid { stroke: #768390; stroke-width: 0.5; opacity: 0.25; }
-  .rev { stroke: #4493f8; stroke-width: 1.8; fill: none; }
-  .cost { stroke: #d29922; stroke-width: 1.8; fill: none; }
-  .net { stroke: #f85149; stroke-width: 2.2; fill: none; }
-  .pos { fill: #3fb950; } .neg { fill: #f85149; }
-</style>
-  <text class="title" x="64" y="22">Daily margin (annualized bps on deployed position)</text>
-  <line class="grid" x1="64" x2="896" y1="276" y2="276"/><text x="56" y="280" text-anchor="end">-30</text><line class="grid" x1="64" x2="896" y1="197.33333333333334" y2="197.33333333333334"/><text x="56" y="201.33333333333334" text-anchor="end">-20</text><line class="grid" x1="64" x2="896" y1="118.66666666666669" y2="118.66666666666669"/><text x="56" y="122.66666666666669" text-anchor="end">-10</text><line class="grid" x1="64" x2="896" y1="40" y2="40"/><text x="56" y="44" text-anchor="end">0</text><text x="98.66666666666666" y="294" text-anchor="middle">07-24</text><text x="168" y="294" text-anchor="middle">07-25</text><text x="237.33333333333334" y="294" text-anchor="middle">07-26</text><text x="306.6666666666667" y="294" text-anchor="middle">07-27</text><text x="376" y="294" text-anchor="middle">07-28</text><text x="445.3333333333333" y="294" text-anchor="middle">07-29</text><text x="514.6666666666666" y="294" text-anchor="middle">07-30</text><text x="584" y="294" text-anchor="middle">07-31</text><text x="653.3333333333334" y="294" text-anchor="middle">08-01</text><text x="722.6666666666666" y="294" text-anchor="middle">08-02</text><text x="792" y="294" text-anchor="middle">08-03</text><text x="861.3333333333334" y="294" text-anchor="middle">08-04</text>
-  <line class="axis" x1="64" x2="896" y1="276" y2="276"/>
-  <rect class="neg" x="74.66666666666666" y="40" width="48" height="212.8400456"/><rect class="neg" x="144" y="40" width="48" height="212.865156"/><rect class="neg" x="213.33333333333334" y="40" width="48" height="212.86764186666667"/><rect class="neg" x="282.6666666666667" y="40" width="48" height="213.29549413333334"/><rect class="neg" x="352" y="40" width="48" height="212.83248573333333"/><rect class="neg" x="421.3333333333333" y="40" width="48" height="213.10864506666667"/><rect class="neg" x="490.66666666666663" y="40" width="48" height="212.86683159999998"/><rect class="neg" x="560" y="40" width="48" height="212.87989026666668"/><rect class="neg" x="629.3333333333334" y="40" width="48" height="212.91560493333336"/><rect class="neg" x="698.6666666666666" y="40" width="48" height="212.94720533333333"/><rect class="neg" x="768" y="40" width="48" height="212.9082024"/><rect class="neg" x="837.3333333333334" y="40" width="48" height="212.9626476"/></svg>
-
-<h2>Break-even</h2>
-<p><strong>Instantaneous view</strong> (hold everything else at current values):
+<section class="card">
+  <h2>Break-even</h2>
+  
+<p><strong>Instantaneous view</strong> <span class="muted">(hold everything else at current values)</span>:
 margin flips at utilization <strong>54.6%</strong>
-(current: 61.9% — above break-even, margin negative), or at SSR
-<strong>3.08%</strong> (current: 3.52%).
+(current 61.9% — above break-even, margin negative),
+or at SSR <strong>3.08%</strong> (current 3.52%).
 This view is partial: it treats the supply rate as fixed while utilization moves.</p>
-<p><strong>Structural view</strong> (the real break-even):
+<p style="margin:.8rem 0 1rem"><strong>Structural view</strong> <span class="muted">(the real break-even)</span>:
 margin per unit deployed = u × [borrowRate × (1 − RF) − (SSR + 20bps)]
 = u × [3.65% × 0.90 − 3.72%]
-= u × <strong>-0.44%</strong>.
+= u × <strong class="bad">-0.44%</strong>.
 Utilization only scales the magnitude — <em>only the bracketed rate spread flips the sign</em>.
-At current SSR the borrow rate must exceed <strong>4.13%</strong>
-(currently 3.65%); equivalently, at the current borrow rate the SSR must fall below
-<strong>3.08%</strong> (currently 3.52%).</p>
+The borrow rate must exceed <strong>4.13%</strong> (currently 3.65%),
+or equivalently SSR must fall below <strong>3.08%</strong> (currently 3.52%).</p>
+<svg id="chart-be" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 300" width="100%">
+  <line class="grid" x1="64" x2="824" y1="260.0" y2="260.0"/><text class="tick" x="54" y="264.0" text-anchor="end">-150</text><line class="grid" x1="64" x2="824" y1="220.0" y2="220.0"/><text class="tick" x="54" y="224.0" text-anchor="end">-100</text><line class="grid" x1="64" x2="824" y1="180.0" y2="180.0"/><text class="tick" x="54" y="184.0" text-anchor="end">-50</text><line class="grid" x1="64" x2="824" y1="140.0" y2="140.0"/><text class="tick" x="54" y="144.0" text-anchor="end">0</text><line class="grid" x1="64" x2="824" y1="100.0" y2="100.0"/><text class="tick" x="54" y="104.0" text-anchor="end">50</text><line class="grid" x1="64" x2="824" y1="60.0" y2="60.0"/><text class="tick" x="54" y="64.0" text-anchor="end">100</text><line class="grid" x1="64" x2="824" y1="20.0" y2="20.0"/><text class="tick" x="54" y="24.0" text-anchor="end">150</text><line class="zero" x1="64" x2="824" y1="140.0" y2="140.0"/><text class="tick" transform="rotate(-90)" x="-140" y="14" text-anchor="middle">margin (bps annualized)</text><text class="tick" x="64.0" y="280" text-anchor="middle">2%</text><text class="tick" x="254.0" y="280" text-anchor="middle">3%</text><text class="tick" x="444.0" y="280" text-anchor="middle">4%</text><text class="tick" x="634.0" y="280" text-anchor="middle">5%</text><text class="tick" x="824.0" y="280" text-anchor="middle">6%</text>
+  <line class="axisline" x1="64" x2="824" y1="260" y2="260"/>
+  <rect class="gapshade" x="377.2" y="20" width="92.1" height="240"/><path class="line-rev" d="M64.0,235.1L824.0,56.8"/><line class="mark-cur" x1="377.2" x2="377.2" y1="20" y2="260"/><text class="marklabel mark-cur-t" x="383.2" y="36">current: 3.65%</text><line class="mark-be" x1="469.3" x2="469.3" y1="20" y2="260"/><text class="marklabel mark-be-t" x="475.3" y="54">break-even: 4.13%</text>
+  <line class="crosshair" x1="0" x2="0" y1="20" y2="260" style="display:none"/>
+  <rect class="hover" x="64" y="20" width="760" height="240" fill="transparent"/>
+</svg>
+  <details class="method"><summary>Methodology</summary><div class="method-body">
+  <p>The instantaneous view answers "what flips the sign if this one number
+  moves and nothing else does." It is internally inconsistent for
+  utilization: on Aave-style curves the supply rate itself is a function of
+  utilization. The structural identity
+  <code>liquidityRate = borrowRate × u × (1 − reserveFactor)</code>
+  substitutes that dependence out, leaving
+  <code>margin = u × [borrowRate × (1−RF) − (SSR+spread)]</code>:
+  utilization scales the magnitude of profit or loss but cannot change its
+  sign. Only the rate spread can.</p>
+  <p>The chart plots that identity as a function of the borrow rate with
+  utilization (61.9%), SSR (3.52%) and RF (10%)
+  held at their current DB values; the shaded band is the gap between the
+  current borrow rate and the break-even crossing. Every number here is
+  generated from database state at build time — nothing is hardcoded.</p></div></details>
+</section>
 
-<h2>Daily P&amp;L</h2>
-<table>
+<section class="card">
+  <h2>Daily P&amp;L</h2>
+  <table>
 <tr><th>Day (UTC)</th><th class="num">Revenue</th><th class="num">Cost</th><th class="num">Net</th><th class="num">Margin (bps ann.)</th><th class="num">Avg util</th></tr>
 <tr><td>2026-07-24</td>
-    <td class="num">35.8065</td>
-    <td class="num">40.5672</td>
-    <td class="num bad">-4.7608</td>
+    <td class="num">35.81</td>
+    <td class="num">40.57</td>
+    <td class="num bad">-4.76</td>
     <td class="num bad">-27.1</td>
     <td class="num">62.0%</td></tr>
 <tr><td>2026-07-25</td>
-    <td class="num">55.7541</td>
-    <td class="num">63.1682</td>
-    <td class="num bad">-7.4141</td>
+    <td class="num">55.75</td>
+    <td class="num">63.17</td>
+    <td class="num bad">-7.41</td>
     <td class="num bad">-27.1</td>
     <td class="num">62.0%</td></tr>
 <tr><td>2026-07-26</td>
-    <td class="num">55.7577</td>
-    <td class="num">63.1723</td>
-    <td class="num bad">-7.4146</td>
+    <td class="num">55.76</td>
+    <td class="num">63.17</td>
+    <td class="num bad">-7.41</td>
     <td class="num bad">-27.1</td>
     <td class="num">62.0%</td></tr>
 <tr><td>2026-07-27</td>
-    <td class="num">55.7246</td>
-    <td class="num">63.1546</td>
-    <td class="num bad">-7.4299</td>
+    <td class="num">55.72</td>
+    <td class="num">63.15</td>
+    <td class="num bad">-7.43</td>
     <td class="num bad">-27.1</td>
     <td class="num">62.0%</td></tr>
 <tr><td>2026-07-28</td>
-    <td class="num">55.7689</td>
-    <td class="num">63.1831</td>
-    <td class="num bad">-7.4142</td>
+    <td class="num">55.77</td>
+    <td class="num">63.18</td>
+    <td class="num bad">-7.41</td>
     <td class="num bad">-27.1</td>
     <td class="num">62.0%</td></tr>
 <tr><td>2026-07-29</td>
-    <td class="num">55.7493</td>
-    <td class="num">63.1736</td>
-    <td class="num bad">-7.4243</td>
+    <td class="num">55.75</td>
+    <td class="num">63.17</td>
+    <td class="num bad">-7.42</td>
     <td class="num bad">-27.1</td>
     <td class="num">62.0%</td></tr>
 <tr><td>2026-07-30</td>
-    <td class="num">55.7741</td>
-    <td class="num">63.1903</td>
-    <td class="num bad">-7.4163</td>
+    <td class="num">55.77</td>
+    <td class="num">63.19</td>
+    <td class="num bad">-7.42</td>
     <td class="num bad">-27.1</td>
     <td class="num">62.0%</td></tr>
 <tr><td>2026-07-31</td>
-    <td class="num">55.7768</td>
-    <td class="num">63.1939</td>
-    <td class="num bad">-7.4171</td>
+    <td class="num">55.78</td>
+    <td class="num">63.19</td>
+    <td class="num bad">-7.42</td>
     <td class="num bad">-27.1</td>
     <td class="num">62.0%</td></tr>
 <tr><td>2026-08-01</td>
-    <td class="num">55.7777</td>
-    <td class="num">63.1965</td>
-    <td class="num bad">-7.4188</td>
+    <td class="num">55.78</td>
+    <td class="num">63.20</td>
+    <td class="num bad">-7.42</td>
     <td class="num bad">-27.1</td>
     <td class="num">62.0%</td></tr>
 <tr><td>2026-08-02</td>
-    <td class="num">55.7793</td>
-    <td class="num">63.1996</td>
-    <td class="num bad">-7.4203</td>
+    <td class="num">55.78</td>
+    <td class="num">63.20</td>
+    <td class="num bad">-7.42</td>
     <td class="num bad">-27.1</td>
     <td class="num">62.0%</td></tr>
 <tr><td>2026-08-03</td>
-    <td class="num">55.7867</td>
-    <td class="num">63.2060</td>
-    <td class="num bad">-7.4193</td>
+    <td class="num">55.79</td>
+    <td class="num">63.21</td>
+    <td class="num bad">-7.42</td>
     <td class="num bad">-27.1</td>
     <td class="num">62.0%</td></tr>
-<tr><td>2026-08-04</td>
-    <td class="num">2.4709</td>
-    <td class="num">2.7997</td>
-    <td class="num bad">-0.3287</td>
+<tr><td>2026-08-04 <span class="muted">(partial)</span></td>
+    <td class="num">2.47</td>
+    <td class="num">2.80</td>
+    <td class="num bad">-0.33</td>
     <td class="num bad">-27.1</td>
     <td class="num">62.0%</td></tr>
 </table>
-<p class="asof">Generated by <code>src/dashboard.ts</code> from reconciled Postgres state only —
-no live RPC calls at render time. Conventions: ASSUMPTIONS.md.</p>
+  <details class="method"><summary>Methodology</summary><div class="method-body">
+  <p><strong>Data provenance:</strong> pinned block <a href="https://etherscan.io/block/25678138" target="_blank" rel="noopener">25678138</a>
+  (hash <code>0x61dea991fd31a84bc04e65853465f5942f1df5ae5d86814f41042f71961d8ccf</code>), entry tx <a href="https://etherscan.io/tx/0xff40710593559c22a5a795dd4725a1a12447d350f28564d16fe732ba3d1c19f3" target="_blank" rel="noopener"><code>0xff407105…1c19f3</code></a>,
+  accrual run 1 computed 2026-08-04T02:07:54.135Z,
+  reconcile run 3. The dashboard refuses to render if any
+  blocking check fails. Latest run:</p>
+  <ul><li><span class="good">PASS</span> <code>1_draws_minus_repays_eq_vat_art</code></li><li><span class="good">PASS</span> <code>2_scaled_times_index_eq_balanceOf</code></li><li><span class="good">PASS</span> <code>3_sum_revenue_eq_balance_growth</code></li><li><span class="good">PASS</span> <code>4_segment_continuity</code></li><li><span class="good">PASS</span> <code>5_buffer_balance_eq_net_flow</code></li><li><span class="good">PASS</span> <code>6_stored_addresses_eq_fresh_resolution</code></li><li><span class="good">PASS</span> <code>7_chi_rpow_recomputation</code></li><li><span class="good">PASS</span> <code>8_DIAGNOSTIC_rate_integral_vs_index_revenue</code> <span class="muted">(diagnostic, non-blocking)</span></li></ul>
+  <p>Amounts in USDS (2dp), rates 2dp, margins 1dp bps. Check definitions:
+  <code>src/reconcile.ts</code>; conventions: Assumptions below.</p></div></details>
+</section>
+
+<section class="card">
+  <h2>Assumptions</h2>
+  <details class="method"><summary>Full ASSUMPTIONS.md (embedded at build time)</summary>
+  <div class="method-body"><p>Every modeling choice the accrual engine makes, with the on-chain evidence behind it. Anything the brief leaves unspecified is flagged <strong>ASSUMPTION</strong>.</p>
+<h3>Utilization</h3>
+<ul>
+<li>Definition: <code>utilization = variableDebtToken.totalSupply() / aToken.totalSupply()</code> for the SparkLend USDS reserve, sampled via archive <code>eth_call</code> at every block with a <code>ReserveDataUpdated</code> event (table <code>reserve_snapshots</code>).</li>
+<li>Stable debt is excluded because it is zero and disabled: <code>stableDebtToken.totalSupply()</code> (<code>0xDFf828d767E560cf94E4907b2e60673E772748A4</code>) returned <code>0</code> at block 25,678,276 (2026-08-03), and <code>getReserveConfigurationData(USDS)</code> returns <code>stableRateBorrowingEnabled = false</code>.</li>
+<li>Segments use the snapshot at the <strong>segment start</strong> boundary, piecewise-constant until the next boundary — consistent with Aave forward rate semantics (rates set at an update apply until the next update).</li>
+</ul>
+<h3>Cost side (what Osero owes Sky)</h3>
+<ul>
+<li>Basis: SSR + 20bps on the <strong>borrowed portion</strong> of deployed USDS: <code>cost_rate(t) = (annualized_SSR(t) + 0.0020) × utilization(t)</code>, applied to the deployed position.</li>
+<li><strong>ASSUMPTION — spread compounding</strong>: the brief does not specify the compounding convention for the +20bps. We treat it as a linear annual spread added to the rpow-annualized SSR (<code>(ssr/1e27)^31,536,000 − 1 + 0.0020</code>). A per-second-compounded spread would differ by well under 0.1bp at these magnitudes. Stored as data in <code>strategy_cost_terms</code>, not hardcoded.</li>
+<li>SSR history is piecewise-constant from sUSDS <code>File("ssr")</code> events plus a seeded <code>eth_call</code> at range start. In the strategy window: ray 1.000000001121484774769253326 (≈3.60% APY) until block 25,596,101 (2026-07-22), then ray 1.000000001096988989836188433 (≈3.52% APY).</li>
+<li>The on-chain stability fee (jug duty) for ALLOCATOR-PRYSM-A is 0%; the SSR+20bps cost is an off-chain commercial arrangement, which is why it is modeled here rather than read from the chain.</li>
+</ul>
+<h3>Revenue side (what SparkLend pays Osero)</h3>
+<ul>
+<li>Ground truth is <strong>liquidityIndex ratio growth</strong> on Osero's scaled aToken balance: <code>revenue(seg) = position × (index_end / index_start − 1)</code>. Integrating <code>liquidityRate</code> over time is used only as a reconciliation cross-check, never as the primary number.</li>
+<li>Position basis: aToken <code>balanceOf(ALM proxy)</code> equivalent at segment start (scaled balance × segment-start liquidityIndex).</li>
+</ul>
+<h3>Structural margin (dashboard + writeup)</h3>
+<ul>
+<li>Margin per unit deployed = <code>utilization × [variableBorrowRate × (1 − reserveFactor) − (SSR + 20bps)]</code>. Utilization scales the magnitude; **only the bracketed rate spread flips the sign**. The instantaneous "break-even utilization" view is shown too, but the rate spread is the real break-even.</li>
+<li><code>reserveFactor(USDS)</code> = <strong>10%</strong> (1000bp), read from <code>getReserveConfigurationData(USDS)</code> at block 25,678,276.</li>
+<li>Interest rate strategy <code>0x8a95998639A34462A1FdAaaA5506F66F90Ef2fDd</code> parameters (same block): base variable rate 0%, slope1 ≈ 4.7095% (0x26f4adcf307fb60c42eb80 ray), slope2 = 15%, optimal usage ratio (kink) = 80%. Used for break-even and what-if math on the dashboard.</li>
+</ul>
+<h3>Time &amp; interval conventions</h3>
+<ul>
+<li>Day-count: actual seconds / 31,536,000 (365-day year), matching both MakerDAO rpow-per-second math and Aave ray-per-second rate semantics.</li>
+<li>Segments are half-open <code>[start, end)</code>: a boundary event's new values apply from its own timestamp forward. No gaps, no overlaps — enforced by reconciliation check #4.</li>
+<li>Timestamps come from <code>blocks</code> (real block timestamps), never blocks-per-second approximations.</li>
+</ul>
+<h3>Address provenance</h3>
+<p>All SparkLend addresses were resolved on-chain (never trusted from memory): <code>Pool.ADDRESSES_PROVIDER()</code> → <code>getPoolDataProvider()</code> → <code>getReserveTokensAddresses(USDS)</code> / <code>getInterestRateStrategyAddress(USDS)</code>. The reconcile suite re-runs these two calls every run and compares against the stored <code>strategies</code> row (regression guard for the checksum bug caught during the build — two hand-cased addresses failed EIP-55 validation).</p></div></details>
+</section>
+
+<p class="footer">Generated from reconciled Postgres state; opening this file makes no network
+requests. Numbers are frozen at pinned block <a href="https://etherscan.io/block/25678138" target="_blank" rel="noopener">25678138</a> and can only change by
+rerunning the pipeline through the reconciliation gate.
+Visual language after stablewatch.io/analytics.</p>
+
+<div id="tooltip"></div>
+<script>
+(function () {
+  "use strict";
+  var tip = document.getElementById("tooltip");
+  function attach(id, points) {
+    var svg = document.getElementById(id);
+    if (!svg) return;
+    var cross = svg.querySelector(".crosshair");
+    var hover = svg.querySelector(".hover");
+    function toSvgX(evt) {
+      var r = svg.getBoundingClientRect();
+      return (evt.clientX - r.left) * (880 / r.width);
+    }
+    hover.addEventListener("mousemove", function (evt) {
+      var x = toSvgX(evt), best = 0, bd = 1e9;
+      for (var i = 0; i < points.length; i++) {
+        var d = Math.abs(points[i].x - x);
+        if (d < bd) { bd = d; best = i; }
+      }
+      var p = points[best];
+      cross.setAttribute("x1", p.x); cross.setAttribute("x2", p.x);
+      cross.style.display = "";
+      tip.innerHTML = p.lines.map(function (l, j) {
+        return "<div" + (j === 0 ? " class='t0'" : "") + ">" + l + "</div>";
+      }).join("");
+      tip.style.display = "block";
+      var tw = tip.offsetWidth;
+      var left = evt.clientX + 14;
+      if (left + tw > window.innerWidth - 8) left = evt.clientX - tw - 14;
+      tip.style.left = left + "px";
+      tip.style.top = (evt.clientY - 10) + "px";
+    });
+    hover.addEventListener("mouseleave", function () {
+      cross.style.display = "none"; tip.style.display = "none";
+    });
+  }
+  attach("chart-cum", [{"x":95.7,"lines":["2026-07-24","revenue 35.81 USDS","cost 40.57 USDS","net -4.76 USDS"]},{"x":159,"lines":["2026-07-25","revenue 91.56 USDS","cost 103.74 USDS","net -12.17 USDS"]},{"x":222.3,"lines":["2026-07-26","revenue 147.32 USDS","cost 166.91 USDS","net -19.59 USDS"]},{"x":285.7,"lines":["2026-07-27","revenue 203.04 USDS","cost 230.06 USDS","net -27.02 USDS"]},{"x":349,"lines":["2026-07-28","revenue 258.81 USDS","cost 293.25 USDS","net -34.43 USDS"]},{"x":412.3,"lines":["2026-07-29","revenue 314.56 USDS","cost 356.42 USDS","net -41.86 USDS"]},{"x":475.7,"lines":["2026-07-30","revenue 370.34 USDS","cost 419.61 USDS","net -49.27 USDS"]},{"x":539,"lines":["2026-07-31","revenue 426.11 USDS","cost 482.80 USDS","net -56.69 USDS"]},{"x":602.3,"lines":["2026-08-01","revenue 481.89 USDS","cost 546.00 USDS","net -64.11 USDS"]},{"x":665.7,"lines":["2026-08-02","revenue 537.67 USDS","cost 609.20 USDS","net -71.53 USDS"]},{"x":729,"lines":["2026-08-03","revenue 593.46 USDS","cost 672.41 USDS","net -78.95 USDS"]},{"x":792.3,"lines":["2026-08-04 (partial day)","revenue 595.93 USDS","cost 675.20 USDS","net -79.28 USDS"]}]);
+  attach("chart-margin", [{"x":95.7,"lines":["2026-07-24","margin -27.1 bps ann.","avg utilization 62.0%"]},{"x":159,"lines":["2026-07-25","margin -27.1 bps ann.","avg utilization 62.0%"]},{"x":222.3,"lines":["2026-07-26","margin -27.1 bps ann.","avg utilization 62.0%"]},{"x":285.7,"lines":["2026-07-27","margin -27.1 bps ann.","avg utilization 62.0%"]},{"x":349,"lines":["2026-07-28","margin -27.1 bps ann.","avg utilization 62.0%"]},{"x":412.3,"lines":["2026-07-29","margin -27.1 bps ann.","avg utilization 62.0%"]},{"x":475.7,"lines":["2026-07-30","margin -27.1 bps ann.","avg utilization 62.0%"]},{"x":539,"lines":["2026-07-31","margin -27.1 bps ann.","avg utilization 62.0%"]},{"x":602.3,"lines":["2026-08-01","margin -27.1 bps ann.","avg utilization 62.0%"]},{"x":665.7,"lines":["2026-08-02","margin -27.1 bps ann.","avg utilization 62.0%"]},{"x":729,"lines":["2026-08-03","margin -27.1 bps ann.","avg utilization 62.0%"]},{"x":792.3,"lines":["2026-08-04 (partial day)","margin -27.1 bps ann.","avg utilization 62.0%"]}]);
+})();
+</script>
 </body></html>
