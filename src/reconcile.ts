@@ -21,12 +21,13 @@
  *     rate stream against the index stream. Expected to differ by rate/index
  *     rounding and intra-block timing; documented tolerance 0.5%.
  *
- * Checks #2/#3 compare at the last reserve-update block ≤ pinned, not at the
- * pinned block itself: balanceOf accrues via getReserveNormalizedIncome
- * between updates, while our stored index is stepwise — comparing at an
- * update block removes that model difference from the assertion.
+ * Checks #2/#3 compare AT the pinned block using the normalized
+ * (accrued-to-the-second) liquidity index captured in pin_snapshots by the
+ * accrual run — the same quantity balanceOf uses internally, so the
+ * assertion holds at the pin itself rather than at the last update block.
  */
 
+import "./lib/env.js";
 import { padHex, toFunctionSelector, stringToHex } from "viem";
 import { createPool } from "./lib/db.js";
 import { makeClient, callUint } from "./lib/client.js";
@@ -67,13 +68,14 @@ async function main(): Promise<void> {
   );
   const strategy = strategyRow.rows[0] as { id: number; debt_token: string; rate_strategy: string };
 
-  // Comparison block for index-based checks: last reserve update ≤ pinned.
+  // Index for balance checks: the normalized (accrued-to-the-second) index
+  // at the pin, captured by the accrual run in pin_snapshots.
   const idxRow = await pool.query(
-    `SELECT DISTINCT ON (block_number) block_number::text AS b, liquidity_index::text AS i
-     FROM reserve_updates WHERE block_number <= $1
-     ORDER BY block_number DESC, log_index DESC LIMIT 1`, [pinned.toString()],
+    `SELECT liquidity_index_normalized::text AS i FROM pin_snapshots WHERE block_number = $1`,
+    [pinned.toString()],
   );
-  const idxBlock = BigInt((idxRow.rows[0] as { b: string }).b);
+  if (idxRow.rows.length === 0) throw new Error(`No pin_snapshots row at block ${pinned}; rerun accrue.`);
+  const idxBlock = pinned;
   const indexAt = BigInt((idxRow.rows[0] as { i: string }).i);
 
   const results: CheckResult[] = [];

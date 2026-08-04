@@ -22,19 +22,12 @@
  * so the text and chart self-update on future runs.
  */
 
+import "./lib/env.js";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createPool } from "./lib/db.js";
 import { rpow, RAY } from "./lib/rpow.js";
 
 const YEAR_S = 31_536_000;
-
-/**
- * SparkLend USDS reserveFactor, verified via getReserveConfigurationData at
- * block 25,678,276 (see ASSUMPTIONS.md). A config constant, not indexed
- * state: it has never changed for this reserve; if Spark governance changes
- * it, reconcile check #8 (rate-integral diagnostic) drifts and flags it.
- */
-const RESERVE_FACTOR = 0.10;
 
 // ---------------------------------------------------------------------------
 // Design tokens (sampled from stablewatch.io/analytics, 2026-08-04)
@@ -179,13 +172,29 @@ async function main(): Promise<void> {
     `SELECT id, atoken, debt_token, rate_strategy FROM strategies WHERE name='sparklend-usds'`)).rows[0] as
     { id: number; atoken: string; debt_token: string; rate_strategy: string };
   const strategyId = strategyRow.id;
-  const lastSeg = (await pool.query(
-    `SELECT position::text AS pos, ssr::text AS ssr, liquidity_rate::text AS lr, utilization::text AS u
-     FROM accrual_segments WHERE strategy_id=$1 ORDER BY t_start DESC LIMIT 1`, [strategyId])).rows[0] as
-    { pos: string; ssr: string; lr: string; u: string };
+  // As-of-pin state: every "current" number below comes from the pinned
+  // block — reserve totals + normalized index + reserve factor from
+  // pin_snapshots (captured by the accrual run), rates from the last
+  // ReserveDataUpdated at or before the pin (piecewise-constant, so those
+  // ARE the rates in force at the pin), SSR from the last File at or
+  // before the pin. No live reads, no mixed vintages.
+  const pin = (await pool.query(
+    `SELECT atoken_total_supply::text AS supply, variable_debt_total_supply::text AS debt,
+            liquidity_index_normalized::text AS norm, reserve_factor_bps::text AS rf
+     FROM pin_snapshots WHERE block_number = $1`, [accrual.pb])).rows[0] as
+    { supply: string; debt: string; norm: string; rf: string } | undefined;
+  if (!pin) throw new Error(`No pin_snapshots row at block ${accrual.pb}; rerun accrue.`);
+  const lastSsr = (await pool.query(
+    `SELECT ssr::text AS ssr FROM ssr_changes WHERE block_number <= $1
+     ORDER BY block_number DESC, log_index DESC LIMIT 1`, [accrual.pb])).rows[0] as { ssr: string };
   const lastReserve = (await pool.query(
-    `SELECT variable_borrow_rate::text AS vbr FROM reserve_updates WHERE block_number <= $1
-     ORDER BY block_number DESC, log_index DESC LIMIT 1`, [accrual.pb])).rows[0] as { vbr: string };
+    `SELECT variable_borrow_rate::text AS vbr, liquidity_rate::text AS lr
+     FROM reserve_updates WHERE block_number <= $1
+     ORDER BY block_number DESC, log_index DESC LIMIT 1`, [accrual.pb])).rows[0] as { vbr: string; lr: string };
+  const posRows = (await pool.query(
+    `SELECT kind, amount::text AS a, liquidity_index_at::text AS i FROM position_events
+     WHERE strategy_id=$1 ORDER BY block_number, log_index`, [strategyId])).rows as
+    { kind: string; a: string; i: string }[];
   const term = (await pool.query(
     `SELECT spread_bps::text AS bps FROM strategy_cost_terms WHERE strategy_id=$1
      ORDER BY effective_from DESC LIMIT 1`, [strategyId])).rows[0] as { bps: string };
@@ -207,13 +216,23 @@ async function main(): Promise<void> {
 
   const assumptionsHtml = mdToHtml(readFileSync("ASSUMPTIONS.md", "utf8"));
 
-  const annSSR = Number(rpow(BigInt(lastSeg.ssr), BigInt(YEAR_S)) - RAY) / 1e27;
+  const annSSR = Number(rpow(BigInt(lastSsr.ssr), BigInt(YEAR_S)) - RAY) / 1e27;
   const spread = Number(term.bps) / 10_000;
   const costRate = annSSR + spread;
-  const liqRate = Number(lastSeg.lr) / 1e27;
+  const liqRate = Number(lastReserve.lr) / 1e27;
   const borrowRate = Number(lastReserve.vbr) / 1e27;
-  const util = Number(lastSeg.u);
-  const position = usds(BigInt(lastSeg.pos));
+  const util = Number(BigInt(pin.debt) * 10n ** 18n / BigInt(pin.supply)) / 1e18;
+  const RESERVE_FACTOR = Number(pin.rf) / 10_000;
+  let scaled = 0n;
+  for (const r of posRows) {
+    const sgn = r.kind === "supply" ? 1n : -1n;
+    scaled += (sgn * BigInt(r.a) * RAY) / BigInt(r.i);
+  }
+  const position = usds((scaled * BigInt(pin.norm)) / RAY);
+  // Current margin: the final segment's run-rate at the pin — what the
+  // position earns minus owes RIGHT NOW, annualized. This decides the
+  // headline; cumulative P&L is shown alongside.
+  const currentMarginBps = (liqRate - costRate * util) * 1e4;
   const spreadBpsLabel = Number(term.bps).toFixed(0);
   const entryDay = daily[0]!.day;
 
@@ -304,8 +323,8 @@ async function main(): Promise<void> {
     "margin (bps annualized)", true);
 
   // ── HTML ─────────────────────────────────────────────────────────────────
-  const answer = totNet >= 0n ? "YES" : "NO";
-  const answerColor = totNet >= 0n ? T.success : T.destructive;
+  const answer = currentMarginBps >= 0 ? "YES" : "NO";
+  const answerColor = currentMarginBps >= 0 ? T.success : T.destructive;
   const rows = daily.map((d) => `<tr><td>${d.day}${d.day === partialDay ? ' <span class="muted">(partial)</span>' : ""}</td>
     <td class="num">${fmt(usds(BigInt(d.revenue)))}</td>
     <td class="num">${fmt(usds(BigInt(d.cost)))}</td>
@@ -323,10 +342,10 @@ async function main(): Promise<void> {
     ["Spread owed to Sky", `+${spreadBpsLabel} bps`, "strategy_cost_terms (brief)"],
     ["Cost rate on borrowed portion", pct(costRate), "SSR + spread"],
     ["SparkLend USDS borrow rate", pct(borrowRate), "ReserveDataUpdated"],
-    ["Reserve factor", pct(RESERVE_FACTOR, 0), "getReserveConfigurationData"],
-    ["Utilization", pct(util), "totalSupply snapshots"],
+    ["Reserve factor", pct(RESERVE_FACTOR, 0), "pin_snapshots (getReserveConfigurationData at pin)"],
+    ["Utilization", pct(util), "pin_snapshots (totalSupply at pin)"],
     ["Supply rate (liquidityRate)", pct(liqRate), "ReserveDataUpdated"],
-    ["Deployed position", `${fmt(position)} USDS`, "scaled balance × liquidityIndex"],
+    ["Deployed position", `${fmt(position)} USDS`, "scaled balance × normalized index at pin"],
   ];
 
   const html = `<!doctype html>
@@ -440,15 +459,19 @@ async function main(): Promise<void> {
 </div>
 
 <div class="headline">
-  <div class="big">${answer} — net ${fmt(usds(totNet))} USDS since inception</div>
-  <div class="sub">Annualized margin ≈ <strong>${fmt(annMarginBps, 1)} bps</strong> on the deployed position
-   · ${totNet < 0n ? "losing" : "earning"} ≈ <strong>$${fmt(Math.abs(perDay))}/day</strong>
+  <div class="big">${answer} — running at ${fmt(currentMarginBps, 1)} bps as of the pinned block</div>
+  <div class="sub"><strong>Current margin</strong> (final segment at pin, annualized): <strong>${fmt(currentMarginBps, 1)} bps</strong>
+   · <strong>Cumulative since inception</strong>: net <strong>${fmt(usds(totNet))} USDS</strong>
+   (≈ ${fmt(annMarginBps, 1)} bps annualized, ${totNet < 0n ? "losing" : "earning"} ≈ <strong>$${fmt(Math.abs(perDay))}/day</strong>)
    over <strong>${fmt(windowDays, 1)}</strong> days (SparkLend USDS, entered ${entryDay})</div>
   <details class="method"><summary>Methodology</summary><div class="method-body">
-    <p>Net = cumulative revenue − cumulative cost since the ${eTx(entry.transaction_hash, "1,000,000 USDS entry")}
-    at block ${eBlock(entry.bn)}. Annualized margin = net ÷ position × (365 ÷ ${fmt(windowDays, 1)} days) in bps.
-    Per-day = net ÷ elapsed days. Position basis is the ${eAddr(strategyRow.atoken.trim(), "spUSDS")} balance
-    (scaled balance × current liquidityIndex).</p>
+    <p><strong>Current margin</strong> = liquidityRate − (SSR + spread) × utilization,
+    all as of the pinned block, annualized — the run-rate of the final accrual
+    segment. This decides the YES/NO. <strong>Cumulative</strong> = revenue − cost summed
+    since the ${eTx(entry.transaction_hash, "1,000,000 USDS entry")} at block ${eBlock(entry.bn)};
+    its annualized figure is net ÷ position × (365 ÷ ${fmt(windowDays, 1)} days) in bps.
+    Position basis is the ${eAddr(strategyRow.atoken.trim(), "spUSDS")} balance
+    (scaled balance × normalized liquidityIndex at the pin).</p>
   </div></details>
 </div>
 

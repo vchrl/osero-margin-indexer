@@ -124,6 +124,20 @@ CREATE TABLE IF NOT EXISTS sync_watermarks (
   updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- As-of-pin reserve state, captured by the accrual engine at each run's
+-- pinned block: reserve totals, the normalized (accrued-to-the-second)
+-- liquidity index, and the reserve factor read from chain — so "current"
+-- values shown downstream are all from one block, never a mix of
+-- latest-event and live state.
+CREATE TABLE IF NOT EXISTS pin_snapshots (
+  block_number               BIGINT        PRIMARY KEY,
+  atoken_total_supply        NUMERIC(78,0) NOT NULL CHECK (atoken_total_supply >= 0),
+  variable_debt_total_supply NUMERIC(78,0) NOT NULL CHECK (variable_debt_total_supply >= 0),
+  liquidity_index_normalized NUMERIC(78,0) NOT NULL CHECK (liquidity_index_normalized > 0),
+  reserve_factor_bps         NUMERIC(10,4) NOT NULL CHECK (reserve_factor_bps >= 0),
+  captured_at                TIMESTAMPTZ   NOT NULL DEFAULT now()
+);
+
 -- ── Derived tables (written by the accrual engine, stage 2) ────────────────
 
 -- Piecewise-constant segments: one row per interval where position, ssr,

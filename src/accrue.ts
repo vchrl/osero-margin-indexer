@@ -17,10 +17,13 @@
  *    segments are derived data, idempotent by reconstruction.
  */
 
+import "./lib/env.js";
+import { toFunctionSelector, padHex } from "viem";
 import type pg from "pg";
 import { createPool } from "./lib/db.js";
-import { makeClient } from "./lib/client.js";
+import { makeClient, callUint } from "./lib/client.js";
 import { rpow, RAY } from "./lib/rpow.js";
+import { SPARK_POOL, SPARK_DATA_PROVIDER, SP_USDS, USDS, USDS_VARIABLE_DEBT } from "./addresses.js";
 
 const YEAR = 31_536_000n;
 const WAD = 10n ** 18n;
@@ -58,7 +61,37 @@ async function main(): Promise<void> {
      WHERE source IN ('ssr','reserve','position','transfers','snapshots')`,
   );
   const pinnedBlock = BigInt((wm.rows[0] as Row).b!);
-  const pinnedHash = (await client.getBlock({ blockNumber: pinnedBlock })).hash;
+  const pinnedMeta = await client.getBlock({ blockNumber: pinnedBlock });
+  const pinnedHash = pinnedMeta.hash;
+  const pinnedTs = Number(pinnedMeta.timestamp);
+
+  // ── Pin-block state snapshot ─────────────────────────────────────────────
+  // Everything the dashboard shows as "current" is as-of THIS block: reserve
+  // totals, the normalized (accrued-to-the-second) liquidity index, and the
+  // reserve factor. Stored in pin_snapshots so downstream stages never mix
+  // "latest event" state with "as of pin" state.
+  const usdsArg = padHex(USDS, { size: 32 }).slice(2);
+  const [pinAtoken, pinDebt, pinNormIncome, reserveCfg] = await Promise.all([
+    callUint(client, SP_USDS, toFunctionSelector("totalSupply()"), pinnedBlock),
+    callUint(client, USDS_VARIABLE_DEBT, toFunctionSelector("totalSupply()"), pinnedBlock),
+    callUint(client, SPARK_POOL,
+      `0x${toFunctionSelector("getReserveNormalizedIncome(address)").slice(2)}${usdsArg}` as `0x${string}`,
+      pinnedBlock),
+    client.call({
+      to: SPARK_DATA_PROVIDER,
+      data: `0x${toFunctionSelector("getReserveConfigurationData(address)").slice(2)}${usdsArg}` as `0x${string}`,
+      blockNumber: pinnedBlock,
+    }),
+  ]);
+  // getReserveConfigurationData word 4 (0-based) is reserveFactor in bps.
+  const pinReserveFactorBps = BigInt(`0x${reserveCfg.data!.slice(2 + 4 * 64, 2 + 5 * 64)}`);
+  await pool.query(
+    `INSERT INTO pin_snapshots (block_number, atoken_total_supply, variable_debt_total_supply,
+       liquidity_index_normalized, reserve_factor_bps)
+     VALUES ($1, $2, $3, $4, $5) ON CONFLICT (block_number) DO NOTHING`,
+    [pinnedBlock.toString(), pinAtoken.toString(), pinDebt.toString(),
+     pinNormIncome.toString(), pinReserveFactorBps.toString()],
+  );
 
   // ── Load raw streams (timestamps from the blocks table) ─────────────────
   const q = (sql: string) => pool.query(sql).then((r) => r.rows as Row[]);
@@ -84,12 +117,25 @@ async function main(): Promise<void> {
     FROM reserve_updates r JOIN blocks b USING (block_number)
     ORDER BY r.block_number, r.log_index DESC`))
     .map((r) => ({ ts: Number(r.ts), block: BigInt(r.block!), rate: BigInt(r.rate!), idx: BigInt(r.idx!) }));
+  // Close the index timeline AT the pin: the normalized income accrues the
+  // stored stepwise index to the pinned block's second, so the final
+  // segment's revenue runs all the way to the pin instead of stopping at the
+  // last ReserveDataUpdated. Rate carries over (piecewise-constant).
+  if (reserveRows.length > 0 && reserveRows[reserveRows.length - 1]!.ts < pinnedTs) {
+    reserveRows.push({
+      ts: pinnedTs, block: pinnedBlock,
+      rate: reserveRows[reserveRows.length - 1]!.rate, idx: pinNormIncome,
+    });
+  }
 
   const snapRows = (await q(`
     SELECT s.block_number::text AS block, extract(epoch FROM b.block_timestamp)::bigint::text AS ts,
            s.atoken_total_supply::text AS supply, s.variable_debt_total_supply::text AS debt
     FROM reserve_snapshots s JOIN blocks b USING (block_number) ORDER BY s.block_number`))
     .map((r) => ({ ts: Number(r.ts), block: BigInt(r.block!), supply: BigInt(r.supply!), debt: BigInt(r.debt!) }));
+  if (snapRows.length === 0 || snapRows[snapRows.length - 1]!.ts < pinnedTs) {
+    snapRows.push({ ts: pinnedTs, block: pinnedBlock, supply: pinAtoken, debt: pinDebt });
+  }
 
   const terms = (await q(`
     SELECT extract(epoch FROM effective_from)::bigint::text AS ts, spread_bps::text AS bps
@@ -104,13 +150,6 @@ async function main(): Promise<void> {
 
   // ── Boundaries: union of event timestamps in [first position, pinned] ───
   const tStart = posEvents[0]!.ts;
-  const pinnedTs = Number(
-    (await pool.query(`SELECT extract(epoch FROM block_timestamp)::bigint::text AS ts FROM blocks WHERE block_number = $1`,
-      [pinnedBlock.toString()])).rows.length
-      ? ((await pool.query(`SELECT extract(epoch FROM block_timestamp)::bigint::text AS ts FROM blocks WHERE block_number = $1`,
-          [pinnedBlock.toString()])).rows[0] as Row).ts
-      : (await client.getBlock({ blockNumber: pinnedBlock })).timestamp,
-  );
 
   const byTs = new Map<number, Boundary>();
   for (const e of [...ssrRows, ...reserveRows, ...posEvents]) {

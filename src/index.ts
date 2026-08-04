@@ -27,6 +27,7 @@
  *                   inversion).
  */
 
+import "./lib/env.js";
 import { createPublicClient, fallback, http, padHex, toFunctionSelector, type PublicClient } from "viem";
 import { mainnet } from "viem/chains";
 import type pg from "pg";

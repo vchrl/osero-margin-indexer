@@ -12,6 +12,7 @@
  * takes ~10min (full re-index of the range).
  */
 
+import "../src/lib/env.js";
 import { execFileSync } from "node:child_process";
 import pg from "pg";
 import { DEFAULT_DATABASE_URL } from "../src/lib/db.js";
