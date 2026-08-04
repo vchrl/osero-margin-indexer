@@ -5,9 +5,29 @@ behind it. Anything the brief leaves unspecified is flagged **ASSUMPTION**.
 
 ## Utilization
 
-- Definition: `utilization = variableDebtToken.totalSupply() / aToken.totalSupply()`
-  for the SparkLend USDS reserve, sampled via archive `eth_call` at every
-  block with a `ReserveDataUpdated` event (table `reserve_snapshots`).
+- Two defensible definitions exist and they are NOT equal:
+  1. `debt / aToken.totalSupply()` — supplier-claims basis (what the cost
+     engine uses);
+  2. `debt / (availableLiquidity + debt)` — the rate-model ratio Aave's
+     interest rate strategy computes rates from.
+- Cost attribution uses definition 1: pro-rata attribution of the borrowed
+  amount over supplier claims exactly exhausts total debt (conservation —
+  every borrowed dollar is attributed to exactly one supplier dollar).
+  Definition 2 leaves the treasury-accrual gap unattributed: aToken
+  totalSupply excludes yield accrued to the Spark treasury but not yet
+  minted, so `availableLiquidity + debt` exceeds it. Measured as of block
+  25,682,510: gap 67,414 USDS on a ~727M reserve, a utilization difference
+  of 0.0058pp, worth roughly 6 cents of cost over this window. These
+  figures move with the pin; the authoritative current values are the
+  check-9 (`9_DIAGNOSTIC_utilization_definitions`) row that reconcile
+  writes to `ops_reconciliation_runs` every run.
+- The structural break-even identity
+  (`liquidityRate = borrowRate × u × (1 − RF)`) uses the rate-model ratio
+  (definition 2), because that is the u the IRS actually prices from; where
+  the dashboard quotes utilization it states which definition it is using.
+- Sampling: archive `eth_call` at every block with a `ReserveDataUpdated`
+  event (table `reserve_snapshots`), plus an as-of-pin snapshot
+  (`pin_snapshots`) each accrual run.
 - Stable debt is excluded because it is zero and disabled:
   `stableDebtToken.totalSupply()` (`0xDFf828d767E560cf94E4907b2e60673E772748A4`)
   returned `0` at block 25,678,276 (2026-08-03), and

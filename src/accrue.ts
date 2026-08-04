@@ -161,13 +161,16 @@ async function main(): Promise<void> {
   byTs.set(pinnedTs, { ts: pinnedTs, block: pinnedBlock });
   const boundaries = [...byTs.values()].sort((a, b) => a.ts - b.ts);
 
-  // Scaled position S at each boundary: S = Σ ± amount×RAY/idx over events ≤ t.
-  // (aToken scaledBalance semantics; check #2 asserts S×index == balanceOf.)
+  // Scaled position S at each boundary: S = Σ ± rayDiv(amount, idx) over
+  // events ≤ t, with Aave's HALF-UP rounding (WadRayMath.rayDiv), not floor —
+  // the first floor version drifted 1 wei from the contract's scaled balance,
+  // which surfaced as a 3-wei miss in check #2 once multiplied by the index.
+  const rayDiv = (a: bigint, b: bigint): bigint => (a * RAY + b / 2n) / b;
   const scaledAt = (t: number): bigint => {
     let s = 0n;
     for (const e of posEvents) {
       if (e.ts > t) break;
-      s += (e.signedAmount * RAY) / e.idx;
+      s += e.signedAmount >= 0n ? rayDiv(e.signedAmount, e.idx) : -rayDiv(-e.signedAmount, e.idx);
     }
     return s;
   };

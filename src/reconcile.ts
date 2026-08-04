@@ -125,9 +125,11 @@ async function main(): Promise<void> {
   let principal = 0n;
   for (const r of posRows.rows as { kind: string; a: string; i: string }[]) {
     const amt = BigInt(r.a);
-    const sgn = r.kind === "supply" ? 1n : -1n;
-    scaled += (sgn * amt * RAY) / BigInt(r.i);
-    principal += sgn * amt;
+    const idx = BigInt(r.i);
+    // Aave rayDiv rounds half-up; mirror it exactly (see accrue.ts).
+    const sc = (amt * RAY + idx / 2n) / idx;
+    scaled += r.kind === "supply" ? sc : -sc;
+    principal += r.kind === "supply" ? amt : -amt;
   }
   void scaledRow;
   const balSelector = toFunctionSelector("balanceOf(address)");
@@ -241,6 +243,41 @@ async function main(): Promise<void> {
     }
   }
 
+  // ── 9. DIAGNOSTIC: three utilization definitions at the pin ─────────────
+  // (a) debt / aToken totalSupply — what the cost engine uses: pro-rata
+  //     attribution over supplier claims exactly exhausts total debt.
+  // (b) debt / (availableLiquidity + debt) — the rate-model ratio Aave's
+  //     IRS computes rates from.
+  // (c) liquidityRate / (variableBorrowRate × (1 − RF)) — the utilization
+  //     implied by the posted rates via the structural identity.
+  // The (a)-(b) gap is the treasury accrual not yet minted as aTokens;
+  // recorded every run so drift is visible, never blocking.
+  {
+    const pinRow = (await pool.query(
+      `SELECT atoken_total_supply::text AS supply, variable_debt_total_supply::text AS debt,
+              reserve_factor_bps::text AS rf FROM pin_snapshots WHERE block_number = $1`,
+      [pinned.toString()])).rows[0] as { supply: string; debt: string; rf: string };
+    const availData = `0x${balSelector.slice(2)}${padHex(SP_USDS, { size: 32 }).slice(2)}` as `0x${string}`;
+    const avail = await callUint(client, USDS, availData, pinned);
+    const rates = (await pool.query(
+      `SELECT liquidity_rate::text AS lr, variable_borrow_rate::text AS vbr
+       FROM reserve_updates WHERE block_number <= $1
+       ORDER BY block_number DESC, log_index DESC LIMIT 1`, [pinned.toString()])).rows[0] as
+      { lr: string; vbr: string };
+    const supply = Number(pinRow.supply), debt = Number(pinRow.debt);
+    const rf = Number(pinRow.rf) / 10_000;
+    const a = debt / supply;
+    const b = debt / (Number(avail) + debt);
+    const c = Number(rates.lr) / (Number(rates.vbr) * (1 - rf));
+    const p6 = (x: number) => x.toFixed(6);
+    results.push({
+      name: "9_DIAGNOSTIC_utilization_definitions",
+      expected: `a_debt_over_atokenSupply=${p6(a)}`,
+      actual: `b_debt_over_availPlusDebt=${p6(b)};c_rate_implied=${p6(c)};delta_b_a=${p6(b - a)};delta_c_a=${p6(c - a)};atokenSupply_minus_availPlusDebt_usds=${((supply - Number(avail) - debt) / 1e18).toFixed(2)}`,
+      tolerance: "diagnostic", blocking: false,
+    });
+  }
+
   // ── 8. DIAGNOSTIC: rate-integrated vs index-telescoped revenue ──────────
   {
     const rateRev = await pool.query(
@@ -276,7 +313,10 @@ async function main(): Promise<void> {
         (/^-?\d+$/.test(r.actual) ? BigInt(r.actual) : 0n),
       );
       const numeric = /^-?\d+$/.test(r.expected) && /^-?\d+$/.test(r.actual);
-      const pass = numeric ? diff <= BigInt(r.tolerance) : r.expected === r.actual;
+      // Non-numeric diagnostics are informational recordings (e.g. the
+      // three utilization definitions): they cannot fail, only be read.
+      const pass = numeric ? diff <= BigInt(r.tolerance)
+        : r.blocking ? r.expected === r.actual : true;
       const status = pass ? "pass" : "fail";
       if (!pass && r.blocking) failedBlocking++;
       await c.query(

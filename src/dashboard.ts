@@ -225,8 +225,9 @@ async function main(): Promise<void> {
   const RESERVE_FACTOR = Number(pin.rf) / 10_000;
   let scaled = 0n;
   for (const r of posRows) {
-    const sgn = r.kind === "supply" ? 1n : -1n;
-    scaled += (sgn * BigInt(r.a) * RAY) / BigInt(r.i);
+    const idx = BigInt(r.i);
+    const sc = (BigInt(r.a) * RAY + idx / 2n) / idx; // Aave rayDiv, half-up
+    scaled += r.kind === "supply" ? sc : -sc;
   }
   const position = usds((scaled * BigInt(pin.norm)) / RAY);
   // Current margin: the final segment's run-rate at the pin — what the
