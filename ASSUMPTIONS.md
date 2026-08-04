@@ -46,7 +46,9 @@ behind it. Anything the brief leaves unspecified is flagged **ASSUMPTION**.
   +20bps combines with SSR. Conventions range from a linear annual add
   (chosen: `(ssr/1e27)^31,536,000 − 1 + 0.0020`) to a multiplicative APY
   combination (`(1+SSR_apy)(1+0.0020) − 1`). The largest alternative
-  differs by ~0.7bps in rate, ~0.13 USDS over this window. Stored as data
+  differs by ~0.7bps in rate, ≈1.36 USDS of cost over this window
+  as of block 25,683,360 (0.002 × SSR_apy applied to the borrowed
+  exposure). Stored as data
   in `strategy_cost_terms`, not hardcoded.
 - SSR history is piecewise-constant from sUSDS `File("ssr")` events plus a
   seeded `eth_call` at range start. In the strategy window: ray

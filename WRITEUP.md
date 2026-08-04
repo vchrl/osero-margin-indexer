@@ -1,8 +1,13 @@
 # Writeup: Is Osero making money?
 
-Answer: no. Since the Jul 24 entry the SparkLend USDS position has earned 631.34 USDS in supply yield and owed 715.33 USDS to Sky, a net of -83.99 USDS over 11.3 days, roughly -27 bps annualized on the 1,001,000 USDS deployed (a second 1,000 USDS draw+supply landed on Aug 4, block 25,681,464 — the pipeline picked it up with no code changes). The reason is structural, not incidental: at the current rate configuration, every borrowed dollar loses money regardless of utilization. Section 6 covers what I would do about it.
+<!-- headline-numbers:start -->
+Answer: **no**. As of pinned block 25683360: current margin ≈ **-27.1 bps**
+annualized; cumulative net **-84.68 USDS** since the 2026-07-24 entry (earned
+636.50 in supply yield, owed 721.18 to Sky) over 11.4 days on the
+1,001,636.50 USDS deployed. Everything below reconciles against chain state at that block.
+<!-- headline-numbers:end -->
 
-Everything below reconciles against chain state at pinned block 25,682,695. The [dashboard](dashboard/index.html) refuses to render if any blocking check fails.
+Historical context: the strategy entered with 1,000,000 USDS on Jul 24, 2026 (block 25,601,435); a second 1,000 USDS draw+supply landed Aug 4, 2026 (block 25,681,464) and was picked up by the pipeline unattended. The loss is structural, not incidental: at the current rate configuration, every borrowed dollar loses money regardless of utilization. Section 6 covers what I would do about it. The [dashboard](dashboard/index.html) refuses to render if any blocking check fails.
 
 ## 1. How I found everything
 
@@ -45,11 +50,11 @@ Starting anchors: the ilk `ALLOCATOR-PRYSM-A` and the ALM proxy `0x6d370e359e9cb
 
 **The mechanic.** Osero owes Sky SSR plus 20 bps, but only on the slice of its deployed USDS that someone downstream actually borrowed. In a pooled market like SparkLend, capital is fungible, so Osero's borrowed slice is its position times the reserve's utilization. Idle liquidity in the pool costs nothing and earns nothing.
 
-**Which utilization.** Two definitions are defensible and they differ: debt over aToken totalSupply (supplier-claims basis), and debt over availableLiquidity plus debt (the ratio Aave's rate model prices from). Cost attribution uses the first, because pro-rata attribution over supplier claims exactly exhausts total debt — conservation; every borrowed dollar lands on exactly one supplier dollar. The second leaves the treasury-accrual gap unattributed: aToken supply excludes yield accrued to the Spark treasury but not yet minted. Measured as of block 25,682,510, that gap is 67,414 USDS on a ~727M reserve, 0.0058pp of utilization, roughly 6 cents of cost over this window; the live values are re-recorded every run in the check-9 row of `ops_reconciliation_runs`, so quote that row, not this sentence, for current numbers. The structural break-even identity uses the rate-model ratio, since that is what the IRS actually prices from; reconcile diagnostic check 9 records both definitions and their deltas every run ([ASSUMPTIONS.md](ASSUMPTIONS.md)).
+**Which utilization.** Two definitions are defensible and they differ: debt over aToken totalSupply (supplier-claims basis), and debt over availableLiquidity plus debt (the ratio Aave's rate model prices from). Cost attribution uses the first, because pro-rata attribution over supplier claims exactly exhausts total debt — conservation; every borrowed dollar lands on exactly one supplier dollar. The second leaves the treasury-accrual gap unattributed: aToken supply excludes yield accrued to the Spark treasury but not yet minted. Measured as of block 25,682,510, that gap was 67,414 USDS on a ~727M reserve, 0.0058pp of utilization, roughly 6 cents of cost over this window; the live values are re-recorded every run in the check-9 row of `ops_reconciliation_runs`, so quote that row, not this sentence, for current numbers. The structural break-even identity uses the rate-model ratio, since that is what the IRS actually prices from; reconcile diagnostic check 9 records both definitions and their deltas every run ([ASSUMPTIONS.md](ASSUMPTIONS.md)).
 
 **Revenue.** The ground truth for what SparkLend pays is the liquidity index. The aToken balance is scaled balance times the index, so revenue over any window is the scaled position times the index growth. Summing per-segment revenue telescopes to exactly the balance growth, which makes the primary number immune to segment boundary errors. Integrating the posted liquidityRate over time is used only as an independent cross-check (check 8), never as the primary number. This mirrors how the contract itself computes balances.
 
-**Cost.** There is no contract that reports it, as the brief says: jug duty is 0% and the obligation is commercial. So the engine computes a piecewise integral. Boundaries are the union of SSR changes, reserve updates and position events; within a segment every input is constant, so cost is position times (annualized SSR plus 20 bps) times utilization times elapsed seconds over a 365-day year. The 20 bps convention is not specified in the brief; conventions range from a linear annual add (chosen) to a multiplicative APY combination ((1 + SSR_apy)(1 + 20bps) - 1). I model it as the linear annual spread on the rpow-annualized SSR ([ASSUMPTIONS.md](ASSUMPTIONS.md)), record it as data in `strategy_cost_terms` rather than code, and flag it in section 7. The largest alternative differs by about 0.7 bps in rate, roughly 0.13 USDS over this window.
+**Cost.** There is no contract that reports it, as the brief says: jug duty is 0% and the obligation is commercial. So the engine computes a piecewise integral. Boundaries are the union of SSR changes, reserve updates and position events; within a segment every input is constant, so cost is position times (annualized SSR plus 20 bps) times utilization times elapsed seconds over a 365-day year. The 20 bps convention is not specified in the brief; conventions range from a linear annual add (chosen) to a multiplicative APY combination ((1 + SSR_apy)(1 + 20bps) - 1). I model it as the linear annual spread on the rpow-annualized SSR ([ASSUMPTIONS.md](ASSUMPTIONS.md)), record it as data in `strategy_cost_terms` rather than code, and flag it in section 7. The largest alternative differs by about 0.7 bps in rate — roughly 1.36 USDS of cost over this window as of block 25,683,360 (0.002 × SSR_apy × borrowed exposure; the earlier draft understated this ~10× at 0.13).
 
 **What I got wrong first.**
 
@@ -57,9 +62,9 @@ First, the chi cross-check. Reconcile check 7 recomputes chi at the Jul 22 File 
 
 Second, two addresses I typed by hand (the variable debt token and the rate strategy) had invalid EIP-55 casing. viem rejected them. The fix was to stop hand-casing anything: every periphery address is resolved on chain, and check 6 now re-resolves and compares on every run so a future regression cannot slip through.
 
-Third, a refinement rather than a bug. My first break-even framing was "margin flips at 54.6% utilization." That view is internally inconsistent on an Aave-style curve, because the supply rate is itself a function of utilization. Substituting liquidityRate = borrowRate x utilization x (1 - reserveFactor) gives margin per unit deployed = utilization x [borrowRate x (1 - RF) - (SSR + 20bps)]. Utilization scales the magnitude of profit or loss; only the bracketed rate spread can flip the sign. With the borrow rate at 3.65%, RF at 10% and the cost rate at 3.72%, the bracket is -0.44%. The [dashboard](src/dashboard.ts) shows both views and says which one is real.
+Third, a refinement rather than a bug. My first break-even framing was "margin flips at 54.6% utilization." That view is internally inconsistent on an Aave-style curve, because the supply rate is itself a function of utilization. Substituting liquidityRate = borrowRate x utilization x (1 - reserveFactor) gives margin per unit deployed = utilization x [borrowRate x (1 - RF) - (SSR + 20bps)]. Utilization scales the magnitude of profit or loss; only the bracketed rate spread can flip the sign. With the borrow rate at 3.65%, RF at 10% and the cost rate at 3.72% (as of block 25,682,695, when this analysis was first run), the bracket is -0.44%. The [dashboard](src/dashboard.ts) recomputes both views from live DB state on every generation.
 
-Strictly, two different utilizations appear in that identity (section 3, "Which utilization"): the exact form is margin = borrowRate x (1 - RF) x u_rate - costRate x u_claims, where u_rate is the rate-model ratio and u_claims the supplier-claims ratio. The exact break-even borrow rate is costRate x u_claims / ((1 - RF) x u_rate) = 4.1337%, versus 4.1333% from the simplified single-u identity - a 0.4bp-of-a-bp difference. The simplified form is kept everywhere as the intuition, with this as the caveat: at this reserve's treasury-accrual gap the two are indistinguishable in practice.
+Strictly, two different utilizations appear in that identity (section 3, "Which utilization"): the exact form is margin = borrowRate x (1 - RF) x u_rate - costRate x u_claims, where u_rate is the rate-model ratio and u_claims the supplier-claims ratio. The exact break-even borrow rate is costRate x u_claims / ((1 - RF) x u_rate) = 4.1337%, versus 4.1333% from the simplified single-u identity - a 0.04 bps difference (computed as of block 25,683,168). The simplified form is kept everywhere as the intuition, with this as the caveat: at this reserve's treasury-accrual gap the two are indistinguishable in practice.
 
 ## 4. Data model, and why
 
@@ -67,32 +72,32 @@ Three stages, physically separate scripts writing separate tables, so each can b
 
 Raw tables (stage 1, indexer): one table per event stream (`ssr_changes`, `reserve_updates`, `position_events`, `usds_transfers`, `reserve_snapshots`), amounts as NUMERIC(78,0) raw wei/ray, natural key (block_number, log_index), per-stream watermarks, real block timestamps in a `blocks` table. One deliberate deviation: `ssr_changes` stores File("ssr") events, not Drip events. Drip fires on every sUSDS deposit and withdrawal, thousands of times a month, while the SSR changed four times in five months; the accrual engine only needs the piecewise-constant rate history, and the drip mechanics still get exercised through check 7.
 
-Derived tables (stage 2, accrual engine): `accrual_segments` (one row per interval where the rate inputs — SSR, liquidity rate, utilization snapshot — are constant; half-open [start, end)). Balances are not constant within a segment: they drift via index growth. The cost integral freezes utilization and position at segment start, with error bounded by the within-segment index growth — measured maximum 1.4e-5 relative across this window, worth under 0.01 USDS of cost. `pnl_daily` splits segments exactly at UTC midnights; the within-segment split is linear in time, and per-slice flooring remainders are assigned to the last slice of each segment so days sum to segments exactly. Both tables are rebuilt transactionally each run; derived data is idempotent by reconstruction.
+Derived tables (stage 2, accrual engine): `accrual_segments` (one row per interval where the rate inputs — SSR, liquidity rate, utilization snapshot — are constant; half-open [start, end)). Balances are not constant within a segment: they drift via index growth. The cost integral freezes utilization and position at segment start, with error bounded by the within-segment index growth — measured maximum 1.4e-5 relative (as of block 25,682,695), worth under 0.01 USDS of cost. `pnl_daily` splits segments exactly at UTC midnights; the within-segment split is linear in time, and per-slice flooring remainders are assigned to the last slice of each segment so days sum to segments exactly. Both tables are rebuilt transactionally each run; derived data is idempotent by reconstruction.
 
 Ops tables: `ops_runs` (pinned block, block hash, computed_at per run), `ops_reconciliation_runs` (every check result with expected, actual, difference and tolerance), `strategy_cost_terms` (the 20 bps spread as data with its source cited, because a commercial assumption should not masquerade as chain state).
 
-Extension path: `strategies` carries venue, chain_id, and the token addresses, and every derived row is keyed by strategy_id. A second venue is a new strategies row, a venue adapter for its events, and no schema rewrite. That claim is tested in practice by the fact that all venue-specific addresses live in one row today.
+Extension path: `strategies` carries venue, chain_id, and the token addresses, and every derived row is keyed by strategy_id. A second venue is a new strategies row, a venue adapter for its events, and no schema rewrite. The honest split: the schema is venue-agnostic today; the stream definitions, the runtime address map (src/addresses.ts) and several checks are venue-specific code that a second venue would have to add — see the README extensibility section for the precise inventory.
 
 ## 5. Validation against on-chain reality
 
-Eight checks run after every accrual, write their results to `ops_reconciliation_runs`, and gate the dashboard: a failed blocking check exits nonzero and nothing renders. At block 25,678,138:
+Ten checks (eight blocking, two diagnostic) run after every accrual, write their results to `ops_reconciliation_runs`, and gate the dashboard: a failed blocking check exits nonzero and nothing renders. The table below is regenerated from the stored results on every reconcile run:
 
 <!-- reconciliation-table:start -->
 
-Generated from dashboard/reconciliation.json at reconcile time (run 5, pinned block 25683168):
+Generated from dashboard/reconciliation.json at reconcile time (run 7, pinned block 25683360):
 
 | Check | Kind | Status | Difference | Tolerance |
 |---|---|---|---|---|
 | `1_draws_minus_repays_eq_vat_art` | blocking | pass | 0 | 0 |
 | `2_scaled_times_index_eq_balanceOf` | blocking | pass | 0 | 2 |
-| `3_sum_revenue_eq_balance_growth` | blocking | pass | 188 | 406 |
+| `3_sum_revenue_eq_balance_growth` | blocking | pass | 189 | 408 |
 | `4_segment_continuity_and_coverage` | blocking | pass | 0 | 0 |
 | `5_buffer_balance_eq_net_flow` | blocking | pass | 0 | 0 |
 | `6_stored_addresses_eq_fresh_resolution` | blocking | pass | 0 | 0 |
 | `7_chi_rpow_recomputation` | blocking | pass | 1014 | 10000000000 |
 | `9_DIAGNOSTIC_utilization_definitions` | diagnostic | pass | 0 | diagnostic |
-| `8_DIAGNOSTIC_rate_integral_vs_index_revenue` | diagnostic | pass | 188 | 3175071961691588151 |
-| `10_cost_sql_recomputation` | blocking | pass | 28861312837393 | 20000000000000000 |
+| `8_DIAGNOSTIC_rate_integral_vs_index_revenue` | diagnostic | pass | 189 | 3182517267006010710 |
+| `10_cost_sql_recomputation` | blocking | pass | 28928992812659 | 20000000000000000 |
 
 <!-- reconciliation-table:end -->
 
@@ -104,22 +109,22 @@ This draft itself tripped the same class of error: three addresses transcribed b
 
 ## 6. What the [dashboard](src/dashboard.ts) says, and what I would do
 
-The position is a ~1M pilot against a 5M ceiling (1,001,000 USDS after the Aug 4 top-up), 11.3 days old, losing about 7.43 USDS per day, margin around -27 bps annualized. The loss is structural at the current rate configuration: the bracket [borrowRate x (1 - RF) - (SSR + 20bps)] is -0.44%, so every borrowed dollar is underwater and utilization only decides how fast.
+The position is a ~1M pilot against a 5M ceiling (1,001,000 USDS principal after the Aug 4 top-up); the current loss rate and margin are in the generated headline above and on the dashboard. The loss is structural at the current rate configuration: the bracket [borrowRate x (1 - RF) - (SSR + 20bps)] is -0.44%, so every borrowed dollar is underwater and utilization only decides how fast.
 
-What has to change for the sign to flip: the SparkLend USDS borrow rate must exceed 4.13% (currently 3.65%), or SSR must fall below 3.08% (currently 3.52%) without SparkLend rates following it down. On the current curve (kink 80%, slope2 15%), utilization sustained above the kink would push the borrow rate through 4.13% quickly; utilization is 62% today.
+What has to change for the sign to flip (all values as of block 25,683,360; live figures on the dashboard): the SparkLend USDS borrow rate must exceed 4.13% (currently 3.65%), or SSR must fall below 3.08% (currently 3.52%) without SparkLend rates following it down. On the current curve (kink 80%, slope2 15%), utilization sustained above the kink would push the borrow rate through 4.13% quickly; utilization is 62%.
 
 My recommendation, in order:
 
-1. Do not scale the position. The pilot is doing its job, which is producing exactly this measurement. Scaling is worse than linear: adding the remaining ~4M is itself supply-side pressure on the pool. Computed from the stored curve parameters at the pin (kink 80%, slope1 4.709%, RF 10%), +4M moves rate-model utilization from 61.98% to 61.63%, the borrow rate from 3.65% to 3.63%, and the per-unit bracket from -0.44% to -0.46%; the daily loss goes from about 7.4 to about 38.4 USDS/day - worse than the naive 5x (37.1), because the new liquidity dilutes the very rate it earns.
+1. Do not scale the position. The pilot is doing its job, which is producing exactly this measurement. Scaling is worse than linear: adding the remaining ~4M is itself supply-side pressure on the pool. Computed from the stored curve parameters as of block 25,682,695 (kink 80%, slope1 4.709%, RF 10%), +4M moves rate-model utilization from 61.98% to 61.63%, the borrow rate from 3.65% to 3.63%, and the per-unit bracket from -0.44% to -0.46%; the daily loss goes from about 7.4 to about 38.4 USDS/day - worse than the naive 5x (37.1), because the new liquidity dilutes the very rate it earns.
 2. Treat the bracket, not utilization, as the monitored quantity. The pipeline computes it every run; alert when it crosses zero, or set a tolerance band around zero to avoid flapping.
-3. Decide a time limit for the pilot. The bleed is small in absolute terms (roughly 225 USDS per month at current rates), which is a defensible price for keeping the integration warm and the measurement running, but it should be a conscious line item, not an accident. If the spread has not flipped within an agreed window, wipe the draw back to zero; re-entry later costs one transaction.
+3. Decide a time limit for the pilot. The bleed is small in absolute terms (roughly 225 USDS per month at the rates prevailing as of block 25,682,695), which is a defensible price for keeping the integration warm and the measurement running, but it should be a conscious line item, not an accident. If the spread has not flipped within an agreed window, wipe the draw back to zero; re-entry later costs one transaction.
 4. If the goal is spread over SSR specifically, this venue is the wrong shape at current rates: SparkLend's USDS supply side is structurally paying less than SSR plus 20 after the reserve factor. Venues where the earn side is not itself downstream of Sky rates would not have the bracket pinned this tightly.
 
 One observation the brief invites: the utilization example in the brief (1M at 50% utilization owes on 500k) is correct for the cost side, but on this venue utilization cannot flip profitability by itself, because the revenue side moves with it. Magnitude yes, sign no. If the intent behind the example was that higher idle liquidity protects the margin, the on-chain rate structure says otherwise.
 
 ## 7. Ambiguities flagged
 
-1. The compounding convention of the 20 bps spread is unspecified. Modeled as a linear annual spread on the annualized SSR, stored as configuration with the brief cited as source ([ASSUMPTIONS.md](ASSUMPTIONS.md)). The alternative differs by under 0.1 bp here, so I did not email about it; had the position been 100x larger I would have.
+1. The compounding convention of the 20 bps spread is unspecified. Modeled as a linear annual spread on the annualized SSR, stored as configuration with the brief cited as source ([ASSUMPTIONS.md](ASSUMPTIONS.md)). The largest alternative differs by ~0.7 bps in rate, ≈1.36 USDS over this window (computed as of block 25,683,360) — small enough that I did not email about it; had the position been 100x larger I would have.
 2. "Deployed USDS" could mean the original principal or the current balance including accrued yield. I use the current balance at each segment start, since that is Osero's actual exposure in the pool at that moment. The difference over this window is a few cents of cost.
 3. The brief says the position and rates are reachable from the two anchors, and they are, but the venue was named in governance before the chain confirmed it. I treated the executive text as a hypothesis and the transaction trace as the confirmation; if they had disagreed, the chain would have won.
 

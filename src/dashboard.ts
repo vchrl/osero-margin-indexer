@@ -24,6 +24,14 @@
 
 import "./lib/env.js";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+
+/** Splices generated content between marker comments in a markdown file. */
+function spliceBetween(path: string, start: string, end: string, content: string): void {
+  const md = readFileSync(path, "utf8");
+  const i0 = md.indexOf(start), i1 = md.indexOf(end);
+  if (i0 === -1 || i1 === -1) throw new Error(`Markers ${start} / ${end} not found in ${path}`);
+  writeFileSync(path, md.slice(0, i0) + start + "\n" + content + "\n" + end + md.slice(i1 + end.length));
+}
 import { createPool } from "./lib/db.js";
 import { rpow, RAY } from "./lib/rpow.js";
 import { REQUIRED_CHECKS } from "./lib/checks.js";
@@ -514,10 +522,12 @@ ${card(`Daily margin${partialDay ? ` <span class="muted" style="font-weight:400;
 <div class="legend"><span><span class="sw" style="background:${T.destructive}"></span>daily margin (left, bps ann.)</span>
 <span><span class="sw" style="background:${T.brand};height:3px;margin-bottom:3px"></span>avg utilization (right)</span></div>
 ${marginChart}`, `
-  <p>Bars: each UTC day's net (revenue − cost) annualized against the
-  end-of-day position, in bps (left axis). Line: that day's time-weighted
-  average utilization (right axis) — the bars are flat because utilization
-  and rates have been flat; margin moves only when those inputs move.
+  <p>Bars: each UTC day's net (revenue − cost), exposure-weighted
+  annualized — net × year × 10,000 ÷ Σ(position × dt) over that day's
+  position-seconds — in bps (left axis), the same formula as the headline's
+  cumulative figure. Line: that day's time-weighted average utilization
+  (right axis) — the bars are flat because utilization and rates have been
+  flat; margin moves only when those inputs move.
   Segments are split at UTC midnights; rates are constant within a segment
   (balances drift via index growth), the within-segment split is linear in
   time, and flooring remainders go to each segment's last slice so days sum
@@ -637,7 +647,53 @@ Visual language after stablewatch.io/analytics.</p>
 
   mkdirSync("dashboard", { recursive: true });
   writeFileSync("dashboard/index.html", html);
-  console.log(`dashboard/index.html written (as of block ${accrual.pb}; net ${fmt(usds(totNet))} USDS, ${fmt(annMarginBps, 1)} bps).`);
+
+  // ── Single-source the prose numbers ──────────────────────────────────────
+  // README headline + latest-run table and the WRITEUP intro numbers are
+  // generated here, from the same DB state and the same reconciliation
+  // artifact the dashboard just rendered — no hand-typed check values
+  // anywhere. Refuses to proceed if the committed artifact disagrees with
+  // the run this dashboard is citing.
+  const artifact = JSON.parse(readFileSync("dashboard/reconciliation.json", "utf8")) as {
+    run_id: number; pinned_block: string;
+    checks: { name: string; status: string; blocking: boolean; difference: string; tolerance: string }[];
+  };
+  if (String(artifact.run_id) !== String(reconcile.run_id) || artifact.pinned_block !== accrual.pb) {
+    throw new Error(
+      `dashboard/reconciliation.json (run ${artifact.run_id}, block ${artifact.pinned_block}) does not match ` +
+        `this run (reconcile ${reconcile.run_id}, block ${accrual.pb}); rerun reconcile before dashboard.`,
+    );
+  }
+
+  const verb = totNet < 0n ? "losing" : "earning";
+  const headline =
+    `**Is Osero making money?** As of block ${accrual.pb} (reconcile run ${reconcile.run_id}): **${answer}.**\n` +
+    `Current margin ≈ **${fmt(currentMarginBps, 1)} bps** annualized; cumulative net **${fmt(usds(totNet))} USDS**\n` +
+    `since the ${entryDay} entry on the ${fmt(position)} USDS position, ${verb} ≈ **$${fmt(Math.abs(perDay))}/day**\n` +
+    `over **${fmt(windowDays, 1)}** days. Structurally: margin per unit deployed =\n` +
+    `\`u × [borrowRate×(1−RF) − (SSR+${spreadBpsLabel}bps)]\` = \`u × [${pct(borrowRate)}×${(1 - RESERVE_FACTOR).toFixed(2)} − ${pct(costRate)}]\` =\n` +
+    `\`u × ${pct(structuralSpread)}\` — utilization only scales the loss; the borrow rate must exceed\n` +
+    `~${pct(beBorrowRate)} (or SSR fall below ~${pct(beSSR)}) to flip the sign.`;
+  spliceBetween("README.md", "<!-- headline:start -->", "<!-- headline:end -->", headline);
+
+  const tableRows = artifact.checks.map((c) => {
+    const kind = c.name.includes("DIAGNOSTIC") ? "diagnostic" : c.blocking ? "blocking" : "info";
+    return `| \`${c.name}\` | ${kind} | ${c.status} | ${c.difference} | ${c.tolerance} |`;
+  }).join("\n");
+  const table =
+    `Latest run (reconcile run ${reconcile.run_id}, pinned block ${accrual.pb}), generated from\n` +
+    `[dashboard/reconciliation.json](dashboard/reconciliation.json):\n\n` +
+    `| Check | Kind | Status | Difference | Tolerance |\n|---|---|---|---|---|\n${tableRows}`;
+  spliceBetween("README.md", "<!-- latest-run-table:start -->", "<!-- latest-run-table:end -->", table);
+
+  const writeupIntro =
+    `Answer: **no**. As of pinned block ${accrual.pb}: current margin ≈ **${fmt(currentMarginBps, 1)} bps**\n` +
+    `annualized; cumulative net **${fmt(usds(totNet))} USDS** since the ${entryDay} entry (earned\n` +
+    `${fmt(usds(totRev))} in supply yield, owed ${fmt(usds(totCost))} to Sky) over ${fmt(windowDays, 1)} days on the\n` +
+    `${fmt(position)} USDS deployed. Everything below reconciles against chain state at that block.`;
+  spliceBetween("WRITEUP.md", "<!-- headline-numbers:start -->", "<!-- headline-numbers:end -->", writeupIntro);
+
+  console.log(`dashboard/index.html + generated prose blocks written (run ${reconcile.run_id}, block ${accrual.pb}; net ${fmt(usds(totNet))} USDS, current ${fmt(currentMarginBps, 1)} bps).`);
 }
 
 main().catch((error) => {

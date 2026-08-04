@@ -37,7 +37,7 @@ export function createPool(): pg.Pool {
  *    This is an ASSUMPTION: the brief does not specify the convention.
  *    Alternatives range from this linear annual add (chosen) to a
  *    multiplicative APY combination ((1+SSR_apy)(1+20bps)-1); the largest
- *    alternative differs by ~0.7bps in rate, ~0.13 USDS over this window.
+ *    alternative differs by ~0.7bps in rate, ~1.36 USDS over this window.
  *    Flagged in the writeup as underspecified.
  *  - Break-even utilization/SSR are computed at dashboard render time from
  *    as-of-pin state (pin_snapshots + last rates at or before the pin) —

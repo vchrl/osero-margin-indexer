@@ -1,12 +1,14 @@
 # osero-margin-indexer
 
-**Is Osero making money?** As of block 25,682,695 (2026-08-04 UTC): **No.**
-Current margin ≈ **−27 bps** annualized; net **−83.99 USDS** cumulative since
-the Jul 24 entry on the 1,001,000 USDS position (a second 1,000 USDS draw
-landed Aug 4 — the pipeline picked it up unattended), losing ≈ **$7.40/day**.
-Structurally: margin per unit deployed = `u × [borrowRate×(1−RF) − (SSR+20bps)]`
-= `u × [3.65%×0.90 − 3.72%]` = `u × −0.44%` — utilization only scales the loss;
-the borrow rate must exceed ~4.13% (or SSR fall below ~3.08%) to flip the sign.
+<!-- headline:start -->
+**Is Osero making money?** As of block 25683360 (reconcile run 7): **NO.**
+Current margin ≈ **-27.1 bps** annualized; cumulative net **-84.68 USDS**
+since the 2026-07-24 entry on the 1,001,636.50 USDS position, losing ≈ **$7.42/day**
+over **11.4** days. Structurally: margin per unit deployed =
+`u × [borrowRate×(1−RF) − (SSR+20bps)]` = `u × [3.65%×0.90 − 3.72%]` =
+`u × -0.44%` — utilization only scales the loss; the borrow rate must exceed
+~4.13% (or SSR fall below ~3.08%) to flip the sign.
+<!-- headline:end -->
 
 The fetcher, reconciliation-gate, and schema patterns are carried over from my
 public sUSDS indexer ([github.com/vchrl/susds-indexer](https://github.com/vchrl/susds-indexer));
@@ -20,19 +22,24 @@ results are stored in `ops_reconciliation_runs` and **any failed blocking
 check blocks dashboard generation and fails CI**. A required-check registry
 makes a silently-missing check a blocking failure, and the latest results are
 committed as [dashboard/reconciliation.json](dashboard/reconciliation.json).
-Latest run (block 25,682,695):
 
-| # | Check | Expected | Actual | Status |
-|---|-------|----------|--------|--------|
-| 1 | draws − repays == `vat.urns(ilk, AllocatorVault).art` | 1,001,000e18 | 1,001,000e18 | PASS (exact) |
-| 2 | scaled position × normalized index == `spUSDS.balanceOf(ALM proxy)` at pin | 1001631337958158429628674 | …628673 | PASS (1 wei; Aave rayMul rounds half-up, we floor the product) |
-| 3 | Σ segment revenue == balance growth over principal | 631337958158429628674 | …628486 | PASS (188 wei over 403 floor-divided segments) |
-| 4 | segment continuity + coverage of [inception, pin] | cover exact, 0 gaps | cover exact, 0 gaps | PASS (exact) |
-| 5 | `USDS.balanceOf(AllocatorBuffer)` == net transfer flow | 0 | 0 | PASS (exact) |
-| 6 | stored aToken/debtToken/rateStrategy == fresh Pool-derived resolution | — | byte-identical | PASS (exact) |
-| 7 | chi rpow recomputation across the Jul 22 `File("ssr")` | 1103935849059635208099476332 | …475318 | PASS (1,014 ray units vs 1e10 tolerance) |
-| 8 | rate-integral vs index-telescoped revenue (**diagnostic**) | 631.3379581584285 | 631.3379581584287 | PASS (agree to 12 sig figs) |
-| 9 | three utilization definitions at pin (**diagnostic**) | a=0.619814 | b=c=0.619756, gap −67,529 USDS | recorded |
+<!-- latest-run-table:start -->
+Latest run (reconcile run 7, pinned block 25683360), generated from
+[dashboard/reconciliation.json](dashboard/reconciliation.json):
+
+| Check | Kind | Status | Difference | Tolerance |
+|---|---|---|---|---|
+| `1_draws_minus_repays_eq_vat_art` | blocking | pass | 0 | 0 |
+| `2_scaled_times_index_eq_balanceOf` | blocking | pass | 0 | 2 |
+| `3_sum_revenue_eq_balance_growth` | blocking | pass | 189 | 408 |
+| `4_segment_continuity_and_coverage` | blocking | pass | 0 | 0 |
+| `5_buffer_balance_eq_net_flow` | blocking | pass | 0 | 0 |
+| `6_stored_addresses_eq_fresh_resolution` | blocking | pass | 0 | 0 |
+| `7_chi_rpow_recomputation` | blocking | pass | 1014 | 10000000000 |
+| `9_DIAGNOSTIC_utilization_definitions` | diagnostic | pass | 0 | diagnostic |
+| `8_DIAGNOSTIC_rate_integral_vs_index_revenue` | diagnostic | pass | 189 | 3182517267006010710 |
+| `10_cost_sql_recomputation` | blocking | pass | 28928992812659 | 20000000000000000 |
+<!-- latest-run-table:end -->
 
 Checks 2/3 are mathematically dependent (revenue telescopes to the balance
 identity); check 8 is the independent cross-validation of the rate stream
@@ -166,10 +173,13 @@ definitions in `src/index.ts` are SparkLend/Sky-specific (addresses, topics,
 decode shapes), `src/addresses.ts` is a mainnet-only constant map, the ilk
 is a constant in `src/reconcile.ts`, several checks encode Aave/vat
 semantics, and the RPC client has no per-chain routing. A second venue is a
-new stream set + strategies row + venue-specific checks; a second chain
-additionally needs per-chain clients, finality rules and watermark scoping.
-The schema will take it without migration; the code will not without new
-adapters.
+new stream set + strategies row + venue-specific checks; note also that
+`reserve_snapshots`/`pin_snapshots` are keyed `(chain_id, block_number)`
+with no reserve/strategy column, so a second strategy on the SAME chain
+needs that key extended — cross-chain is additive today, same-chain
+multi-reserve is not. A second chain additionally needs per-chain clients,
+finality rules and watermark scoping. The schema will otherwise take it
+without migration; the code will not without new adapters.
 
 ## Scaling judgment (what changes at 100×)
 
