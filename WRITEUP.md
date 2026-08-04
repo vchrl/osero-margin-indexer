@@ -1,8 +1,8 @@
 # Writeup: Is Osero making money?
 
-Answer: no. Since the Jul 24 entry the SparkLend USDS position has earned 595.93 USDS in supply yield and owed 675.20 USDS to Sky, a net of -79.28 USDS over 10.7 days, roughly -27 bps annualized on the 1M deployed. The reason is structural, not incidental: at the current rate configuration, every borrowed dollar loses money regardless of utilization. Section 6 covers what I would do about it.
+Answer: no. Since the Jul 24 entry the SparkLend USDS position has earned 631.34 USDS in supply yield and owed 715.33 USDS to Sky, a net of -83.99 USDS over 11.3 days, roughly -27 bps annualized on the 1,001,000 USDS deployed (a second 1,000 USDS draw+supply landed on Aug 4, block 25,681,464 — the pipeline picked it up with no code changes). The reason is structural, not incidental: at the current rate configuration, every borrowed dollar loses money regardless of utilization. Section 6 covers what I would do about it.
 
-Everything below reconciles against chain state at pinned block 25,678,138. The [dashboard](dashboard/index.html) refuses to render if any blocking check fails.
+Everything below reconciles against chain state at pinned block 25,682,695. The [dashboard](dashboard/index.html) refuses to render if any blocking check fails.
 
 ## 1. How I found everything
 
@@ -12,7 +12,7 @@ Starting anchors: the ilk `ALLOCATOR-PRYSM-A` and the ALM proxy `0x6d370e359e9cb
 
 **Step 2, governance history.** Searching vote.sky.money for the ilk dated the lifecycle. The Feb 26, 2026 executive initialized the ilk (line 10M, gap 10M, duty 0%, ttl 24h) with the same vault and buffer addresses the Chainlog carries, which cross-confirmed step 1. The Jul 16, 2026 executive is where the strategy appears: it onboards a Diamond PAU Controller on the Osero instance, authorizes the ALM proxy on the vault and buffer, whitelists it on the LitePSM, onboards "SparkLend USDS (spUSDS)" with rate limits, and cuts the ceiling to 5M with a 1M gap. The accompanying Atlas edit sets maximum exposure at 5,000,000 USDS and a 100% capital ratio requirement. That named the venue before I touched a single transaction.
 
-**Step 3, verify on chain.** Governance text is a claim, not a fact, so I traced the ALM proxy itself. It has exactly two transactions. Deployment on Jun 23, 2026 (block 25,383,064) by the PAUFactory, plus role grants. Then one action on Jul 24, 2026 (block 25,601,435, tx `0xff40710593559c22a5a795dd4725a1a12447d350f28564d16fe732ba3d1c19f3`): in a single atomic transaction the proxy draws 1,000,000 USDS from the AllocatorVault, pulls it from the buffer, approves, and calls `Pool.supply` on SparkLend, receiving 1,000,000 spUSDS minted to itself. The trace confirmed the venue, resolved the spUSDS aToken address, and established that this is the entire position history: one entry, no withdrawals, no second draw.
+**Step 3, verify on chain.** Governance text is a claim, not a fact, so I traced the ALM proxy itself. It has exactly two transactions. Deployment on Jun 23, 2026 (block 25,383,064) by the PAUFactory, plus role grants. Then one action on Jul 24, 2026 (block 25,601,435, tx `0xff40710593559c22a5a795dd4725a1a12447d350f28564d16fe732ba3d1c19f3`): in a single atomic transaction the proxy draws 1,000,000 USDS from the AllocatorVault, pulls it from the buffer, approves, and calls `Pool.supply` on SparkLend, receiving 1,000,000 spUSDS minted to itself. The trace confirmed the venue, resolved the spUSDS aToken address, and established the position history at the time of discovery: one entry, no withdrawals. (A second, identical-pattern draw+supply of 1,000 USDS followed on Aug 4, 2026, block 25,681,464, while this exercise was underway — the indexer picked it up in the normal incremental run and reconcile check 1 tracks the vat debt at 1,001,000 exactly.)
 
 **Step 4, resolve the venue's own contracts on chain.** I did not trust any remembered or third-party address for the SparkLend periphery. From the Pool: `ADDRESSES_PROVIDER()` then `getPoolDataProvider()` gives the ProtocolDataProvider, and from it `getReserveTokensAddresses(USDS)` and `getInterestRateStrategyAddress(USDS)` give the aToken (matching the trace exactly), the variable debt token, and the rate strategy. The reconcile suite re-runs this resolution every run and compares it to the stored values.
 
@@ -27,6 +27,8 @@ Starting anchors: the ilk `ALLOCATOR-PRYSM-A` and the ALM proxy `0x6d370e359e9cb
 | AllocatorBuffer | 0xD0BB61b34771146e31055f20f329cDf97429F889 | USDS transit between vault and proxy | Chainlog; confirmed by transferFrom in the entry tx |
 | SubProxy | 0x24fdcd3bFA5C2553e05B2f9AD0365EBC296278D3 | Governance sub-proxy executing Osero proxy spells | Chainlog PRYSM_SUBPROXY |
 | StarGuard | 0xBfA2D1dA838E55A74c61699e164cDFF8cF0cF0e2 | Whitelists Osero proxy spells | Chainlog PRYSM_STARGUARD |
+| ALLOCATOR_ROLES | 0x9A865A710399cea85dbD9144b7a09C889e94E803 | Shared allocator permission registry | Chainlog getAddress("ALLOCATOR_ROLES"), resolved on chain |
+| ALLOCATOR_REGISTRY | 0xCdCFA95343DA7821fdD01dc4d0AeDA958051bB3B | Maps ilks to buffers for the allocator system | Chainlog getAddress("ALLOCATOR_REGISTRY"), resolved on chain |
 | MCD_VAT | 0x35D1b3F3D7966A1DFe207aa4514C12a259A0492B | Core accounting; vat.urns(ilk, vault).art is the drawn debt | Chainlog; used in reconcile check 1 |
 | MCD_JUG | 0x19c0976f590D67707E62397C87829d896Dc0f1F1 | Stability fee; duty is 0% for this ilk | Chainlog; confirms the brief's statement that the cost is not an on-chain accrual |
 | USDS | 0xdC035D45d973E3EC169d2276DDab16f1e407384F | The stablecoin | Chainlog |
@@ -47,7 +49,7 @@ Starting anchors: the ilk `ALLOCATOR-PRYSM-A` and the ALM proxy `0x6d370e359e9cb
 
 **Revenue.** The ground truth for what SparkLend pays is the liquidity index. The aToken balance is scaled balance times the index, so revenue over any window is the scaled position times the index growth. Summing per-segment revenue telescopes to exactly the balance growth, which makes the primary number immune to segment boundary errors. Integrating the posted liquidityRate over time is used only as an independent cross-check (check 8), never as the primary number. This mirrors how the contract itself computes balances.
 
-**Cost.** There is no contract that reports it, as the brief says: jug duty is 0% and the obligation is commercial. So the engine computes a piecewise integral. Boundaries are the union of SSR changes, reserve updates and position events; within a segment every input is constant, so cost is position times (annualized SSR plus 20 bps) times utilization times elapsed seconds over a 365-day year. The 20 bps convention is not specified in the brief; I model it as a linear annual spread on the rpow-annualized SSR ([ASSUMPTIONS.md](ASSUMPTIONS.md)), record it as data in `strategy_cost_terms` rather than code, and flag it in section 7. A per-second compounded spread would differ by well under 0.1 bp at these magnitudes.
+**Cost.** There is no contract that reports it, as the brief says: jug duty is 0% and the obligation is commercial. So the engine computes a piecewise integral. Boundaries are the union of SSR changes, reserve updates and position events; within a segment every input is constant, so cost is position times (annualized SSR plus 20 bps) times utilization times elapsed seconds over a 365-day year. The 20 bps convention is not specified in the brief; conventions range from a linear annual add (chosen) to a multiplicative APY combination ((1 + SSR_apy)(1 + 20bps) - 1). I model it as the linear annual spread on the rpow-annualized SSR ([ASSUMPTIONS.md](ASSUMPTIONS.md)), record it as data in `strategy_cost_terms` rather than code, and flag it in section 7. The largest alternative differs by about 0.7 bps in rate, roughly 0.13 USDS over this window.
 
 **What I got wrong first.**
 
@@ -63,7 +65,7 @@ Three stages, physically separate scripts writing separate tables, so each can b
 
 Raw tables (stage 1, indexer): one table per event stream (`ssr_changes`, `reserve_updates`, `position_events`, `usds_transfers`, `reserve_snapshots`), amounts as NUMERIC(78,0) raw wei/ray, natural key (block_number, log_index), per-stream watermarks, real block timestamps in a `blocks` table. One deliberate deviation: `ssr_changes` stores File("ssr") events, not Drip events. Drip fires on every sUSDS deposit and withdrawal, thousands of times a month, while the SSR changed four times in five months; the accrual engine only needs the piecewise-constant rate history, and the drip mechanics still get exercised through check 7.
 
-Derived tables (stage 2, accrual engine): `accrual_segments` (one row per interval where all inputs are constant; half-open [start, end); position, SSR, utilization, revenue, cost per segment) and `pnl_daily` (segments split exactly at UTC midnights, so daily attribution is exact under the model, not prorated). Both are rebuilt transactionally each run; derived data is idempotent by reconstruction.
+Derived tables (stage 2, accrual engine): `accrual_segments` (one row per interval where the rate inputs — SSR, liquidity rate, utilization snapshot — are constant; half-open [start, end)). Balances are not constant within a segment: they drift via index growth. The cost integral freezes utilization and position at segment start, with error bounded by the within-segment index growth — measured maximum 1.4e-5 relative across this window, worth under 0.01 USDS of cost. `pnl_daily` splits segments exactly at UTC midnights; the within-segment split is linear in time, and per-slice flooring remainders are assigned to the last slice of each segment so days sum to segments exactly. Both tables are rebuilt transactionally each run; derived data is idempotent by reconstruction.
 
 Ops tables: `ops_runs` (pinned block, block hash, computed_at per run), `ops_reconciliation_runs` (every check result with expected, actual, difference and tolerance), `strategy_cost_terms` (the 20 bps spread as data with its source cited, because a commercial assumption should not masquerade as chain state).
 
@@ -86,19 +88,19 @@ Eight checks run after every accrual, write their results to `ops_reconciliation
 
 Tolerances are documented where exact equality is impossible and are sized in wei, not percentages, because these checks are identities: a loose tolerance would absorb real bugs. Checks 2 and 3 are mathematically related (the revenue sum telescopes to the balance identity), which is why check 8 exists as the genuinely independent cross-validation of the revenue path.
 
-Separately, a replay test proves the pipeline is deterministic: a fresh database fully re-indexed and re-accrued to the same pinned block produces byte-identical `accrual_segments` and `pnl_daily` to the incrementally synced production database.
+Separately, a replay test proves the pipeline is deterministic: a fresh database fully re-indexed and re-accrued to the same pinned block produces byte-identical `accrual_segments` and `pnl_daily` to the incrementally synced production database. "From scratch" means from the deployment-scoped start block (25,540,000, the spell day) — the strategy's entire on-chain life — not chain genesis.
 
 This draft itself tripped the same class of error: three addresses transcribed by hand into the appendix failed validation against the stored values and were corrected from on-chain resolution before commit.
 
 ## 6. What the [dashboard](src/dashboard.ts) says, and what I would do
 
-The position is a 1M pilot against a 5M ceiling, 10.7 days old, losing about 7.42 USDS per day, margin around -27 bps annualized. The loss is structural at the current rate configuration: the bracket [borrowRate x (1 - RF) - (SSR + 20bps)] is -0.44%, so every borrowed dollar is underwater and utilization only decides how fast.
+The position is a ~1M pilot against a 5M ceiling (1,001,000 USDS after the Aug 4 top-up), 11.3 days old, losing about 7.43 USDS per day, margin around -27 bps annualized. The loss is structural at the current rate configuration: the bracket [borrowRate x (1 - RF) - (SSR + 20bps)] is -0.44%, so every borrowed dollar is underwater and utilization only decides how fast.
 
 What has to change for the sign to flip: the SparkLend USDS borrow rate must exceed 4.13% (currently 3.65%), or SSR must fall below 3.08% (currently 3.52%) without SparkLend rates following it down. On the current curve (kink 80%, slope2 15%), utilization sustained above the kink would push the borrow rate through 4.13% quickly; utilization is 62% today.
 
 My recommendation, in order:
 
-1. Do not scale the position. The 1M pilot is doing its job, which is producing exactly this measurement. Adding the remaining 4M at a -0.44% unit spread just multiplies the daily loss by five.
+1. Do not scale the position. The pilot is doing its job, which is producing exactly this measurement. Scaling is worse than linear: adding the remaining ~4M is itself supply-side pressure on the pool. Computed from the stored curve parameters at the pin (kink 80%, slope1 4.709%, RF 10%), +4M moves rate-model utilization from 61.98% to 61.63%, the borrow rate from 3.65% to 3.63%, and the per-unit bracket from -0.44% to -0.46%; the daily loss goes from about 7.4 to about 38.4 USDS/day - worse than the naive 5x (37.1), because the new liquidity dilutes the very rate it earns.
 2. Treat the bracket, not utilization, as the monitored quantity. The pipeline computes it every run; alert when it crosses zero, or set a tolerance band around zero to avoid flapping.
 3. Decide a time limit for the pilot. The bleed is small in absolute terms (roughly 225 USDS per month at current rates), which is a defensible price for keeping the integration warm and the measurement running, but it should be a conscious line item, not an accident. If the spread has not flipped within an agreed window, wipe the draw back to zero; re-entry later costs one transaction.
 4. If the goal is spread over SSR specifically, this venue is the wrong shape at current rates: SparkLend's USDS supply side is structurally paying less than SSR plus 20 after the reserve factor. Venues where the earn side is not itself downstream of Sky rates would not have the bracket pinned this tightly.
@@ -115,11 +117,20 @@ One observation the brief invites: the utilization example in the brief (1M at 5
 
 The fetcher (adaptive chunking, backoff, endpoint rotation), the NUMERIC(78,0) and watermark schema patterns, the rpow port, and the reconciliation-gate idea are carried over from my public sUSDS indexer (github.com/vchrl/susds-indexer), built and published before this take-home. Everything Osero-specific, the discovery, the venue integration, the accrual engine, the cost model and the checks in section 5, is new for this exercise.
 
-Sources leaned on: the Sky Chainlog and its JSON API, vote.sky.money executive and Atlas edit texts, the sky-ecosystem/diamond-pau repository for the PAU architecture, Spark protocol docs for the aToken and rate model, Etherscan and Herd for traces and contract metadata, and Aave V3 source for index and rate semantics. No third-party indexer code was used.
+Sources leaned on:
+
+- Sky Chainlog JSON API: https://chainlog.sky.money/api/mainnet/active.json
+- Feb 26, 2026 executive ("Launch Agent Onboardings ..."): https://vote.sky.money/executive/template-executive-vote-launch-agent-onboardings-january-monthly-settlement-cycle-and-treasury-management-function-sky-staking-rewards-normalization-prime-agent-proxy-spells-february-26-2026
+- Jul 16, 2026 executive ("... Whitelist Osero ALMProxy ..."): https://vote.sky.money/executive/template-executive-vote-monthly-settlement-cycle-for-june-2026-lssky-sky-rewards-normalization-complete-rwa001-a-offboarding-add-emergency-spells-to-the-chainlog-whitelist-osero-almproxy-adjust-vault-parameters-update-safe-harbor-agreement-prime-agent-proxy-spells-july-16-2026
+- Entry transaction: https://etherscan.io/tx/0xff40710593559c22a5a795dd4725a1a12447d350f28564d16fe732ba3d1c19f3
+- Rate model source: https://github.com/aave/aave-v3-core/blob/master/contracts/protocol/pool/DefaultReserveInterestRateStrategy.sol (SparkLend's deployed instance verified at https://etherscan.io/address/0x8a95998639A34462A1FdAaaA5506F66F90Ef2fDd#code)
+- The sky-ecosystem/diamond-pau repository for the PAU architecture, Spark protocol docs for the aToken and rate model, Etherscan and Herd for traces and contract metadata.
+
+No third-party indexer code was used.
 
 ## 9. Where this breaks at 100x, more strategies, more chains
 
-**Data volume.** At 100x position size the event volume barely moves (position events are still rare), but at 100x venues or chains the bespoke fetch loop becomes the wrong tool. I would move the raw event layer to Ponder, which handles cursor management, reorgs and multi-chain natively, and keep the accrual engine exactly where it is: a separate computation stage reading Ponder's Postgres tables. The financial math does not belong inside an indexing framework.
+**Data volume and price impact.** At 100x position size the event volume barely moves (position events are still rare) — but the economics do not scale linearly: at that size the strategy's own liquidity is the pool, so utilization, the borrow rate and the margin all become endogenous to the position (the +4M what-if in section 6 is the small preview). Modeling that requires making rates a function of the position, not indexed constants. At 100x venues or chains, the bespoke fetch loop becomes the wrong tool. I would move the raw event layer to Ponder, which handles cursor management, reorgs and multi-chain natively, and keep the accrual engine exactly where it is: a separate computation stage reading Ponder's Postgres tables. The financial math does not belong inside an indexing framework.
 
 **The snapshot stream is the first real bottleneck.** Utilization inputs currently come from two archive eth_calls per reserve-update block, about 1,264 calls for three weeks of one reserve. Across many reserves and chains that becomes the dominant RPC cost. The fix is to derive reserve totals from the event stream itself (Supply, Withdraw, Borrow, Repay, plus index growth) and demote archive snapshots to a sampled reconciliation check, the same pattern already used for revenue.
 

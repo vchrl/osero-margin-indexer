@@ -7,12 +7,15 @@
  *  1. draws − repays (USDS mint/burn legs through the buffer) == vat.urns art
  *  2. scaled position × liquidityIndex == spUSDS.balanceOf(ALM proxy)
  *  3. Σ segment revenue == balanceOf growth over principal
- *  4. segment continuity: no gaps/overlaps between consecutive segments
+ *  4. segment continuity AND coverage: no gaps/overlaps, and the segments
+ *     exactly span [inception, pin]
  *  5. USDS.balanceOf(AllocatorBuffer) == net transfer flow into the buffer
- *  6. stored debt_token/rate_strategy == fresh on-chain resolution
- *     (regression guard for the EIP-55 checksum bug caught in this build)
+ *  6. stored aToken/debt_token/rate_strategy == fresh resolution, deriving
+ *     the whole chain from the Pool at run time (regression guard for the
+ *     EIP-55 checksum bug caught in this build)
  *  7. chi at the in-range File("ssr") block == rpow-recomputed chi from the
- *     seed row (validates the SSR math the cost integral rests on)
+ *     seed row (validates the SSR math the cost integral rests on); writes
+ *     an explicit 'skipped' row when <2 SSR observations exist
  *
  * Diagnostic (non-blocking):
  *  8. Σ(liquidityRate × position × Δt / YEAR) vs telescoped index revenue.
@@ -20,6 +23,11 @@
  *     balance identity); this is the independent cross-validation of the
  *     rate stream against the index stream. Expected to differ by rate/index
  *     rounding and intra-block timing; documented tolerance 0.5%.
+ *  9. Three utilization definitions at the pin, recorded with deltas.
+ *
+ * A required-check registry (src/lib/checks.ts) turns a missing check into
+ * a blocking failure, and the latest results are exported as
+ * dashboard/reconciliation.json.
  *
  * Checks #2/#3 compare AT the pinned block using the normalized
  * (accrued-to-the-second) liquidity index captured in pin_snapshots by the

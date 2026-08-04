@@ -4,10 +4,12 @@
  * exponentiation by squaring in ray (1e27) with half-ray rounding at every
  * multiplication step.
  *
- * The port must match the contract bit-for-bit because reconciliation
- * (check 4) recomputes the contract's virtual rate accumulator
- *   chi_virtual = rpow(ssr, now - rho) * chi / RAY
- * and compares the result against totalAssets() with ZERO tolerance. Any
+ * The port must match the contract bit-for-bit because reconcile check 7
+ * recomputes chi across the observed File("ssr") interval
+ *   chi_recomputed = rpow(ssr, file_ts - rho) * chi_seed / RAY
+ * and compares it against the stored chi within a 1e10-ray-unit tolerance
+ * (per-drip rounding legs accumulate ~1e3 ray units of dust). The accrual
+ * engine also uses rpow to annualize the SSR for the cost integral. Any
  * deviation in rounding order would show up as a false divergence.
  *
  * One difference from the Solidity original: the assembly reverts on uint256

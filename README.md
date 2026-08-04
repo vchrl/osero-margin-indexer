@@ -37,8 +37,10 @@ its first version — it compounded from the seed block's timestamp instead of
 and the story are in `src/reconcile.ts`.
 
 There is also an equivalence test: `npm run test:replay` rebuilds a scratch
-database from block zero state and asserts the derived tables are
-byte-identical to the incrementally-synced production database.
+database from scratch — meaning from the deployment-scoped `START_BLOCK`
+(25,540,000, the spell day), the strategy's entire on-chain life — and
+asserts the derived tables are byte-identical to the incrementally-synced
+production database.
 
 ## Quickstart (clone to running)
 
@@ -124,6 +126,8 @@ NUMERIC(78,0) control for the reconciliation identities.
 
 ## Contract map
 
-See [src/addresses.ts](src/addresses.ts) — every address carries its
-provenance; the SparkLend-side ones are resolved on-chain, and reconcile
-check #6 re-verifies them every run.
+See [src/addresses.ts](src/addresses.ts) — the runtime address map; every
+address carries its provenance, the SparkLend-side ones are resolved
+on-chain, and reconcile check #6 re-verifies them every run. The full
+contract inventory (including governance-side contracts the indexer does
+not consume) is the appendix in [WRITEUP.md](WRITEUP.md).

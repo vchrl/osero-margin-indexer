@@ -226,14 +226,23 @@ async function main(): Promise<void> {
   for (const seg of segments) {
     let t = seg.tStart;
     const util = Number(seg.utilNum) / Number(seg.utilDen);
+    // Per-slice flooring would drop up to (slices-1) wei per segment; track
+    // what has been allocated and give the remainder to the segment's last
+    // slice, so days sum to segments EXACTLY.
+    let revAllocated = 0n, costAllocated = 0n;
     while (t < seg.tEnd) {
       const nextMidnight = (Math.floor(t / 86_400) + 1) * 86_400;
       const sliceEnd = Math.min(nextMidnight, seg.tEnd);
+      const last = sliceEnd === seg.tEnd;
       const frac = { num: BigInt(sliceEnd - t), den: BigInt(seg.tEnd - seg.tStart) };
+      const revSlice = last ? seg.revenue - revAllocated : (seg.revenue * frac.num) / frac.den;
+      const costSlice = last ? seg.cost - costAllocated : (seg.cost * frac.num) / frac.den;
+      revAllocated += revSlice;
+      costAllocated += costSlice;
       const key = dayOf(t);
       const d = days.get(key) ?? { revenue: 0n, cost: 0n, positionEod: 0n, utilSec: 0, sec: 0 };
-      d.revenue += (seg.revenue * frac.num) / frac.den;
-      d.cost += (seg.cost * frac.num) / frac.den;
+      d.revenue += revSlice;
+      d.cost += costSlice;
       d.positionEod = seg.position;
       d.utilSec += util * (sliceEnd - t);
       d.sec += sliceEnd - t;

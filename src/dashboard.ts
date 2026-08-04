@@ -513,8 +513,10 @@ ${marginChart}`, `
   end-of-day position, in bps (left axis). Line: that day's time-weighted
   average utilization (right axis) — the bars are flat because utilization
   and rates have been flat; margin moves only when those inputs move.
-  Segments are split at UTC midnights; within a segment accrual is linear
-  in time, so day attribution is exact under the model. The final day
+  Segments are split at UTC midnights; rates are constant within a segment
+  (balances drift via index growth), the within-segment split is linear in
+  time, and flooring remainders go to each segment's last slice so days sum
+  to segments exactly. The final day
   covers only the hours up to the pinned block and is marked partial —
   its bar is an annualized rate, so it is comparable, just noisier.</p>`)}
 

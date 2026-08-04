@@ -32,11 +32,14 @@ export function createPool(): pg.Pool {
  *    USDS. We treat the +20bps as a LINEAR ANNUAL SPREAD added to the
  *    annualized SSR (annualized via rpow over seconds-per-year), i.e.
  *      cost_rate = annualize(ssr) + 0.0020
- *    This is an ASSUMPTION: the brief does not specify the compounding
- *    convention for the spread. A per-second compounded spread would differ
- *    by <0.1bp at these magnitudes; flagged in the writeup as underspecified.
+ *    This is an ASSUMPTION: the brief does not specify the convention.
+ *    Alternatives range from this linear annual add (chosen) to a
+ *    multiplicative APY combination ((1+SSR_apy)(1+20bps)-1); the largest
+ *    alternative differs by ~0.7bps in rate, ~0.13 USDS over this window.
+ *    Flagged in the writeup as underspecified.
  *  - Break-even utilization/SSR are computed at dashboard render time from
- *    the latest segment inputs — deliberately not stored.
+ *    as-of-pin state (pin_snapshots + last rates at or before the pin) —
+ *    deliberately not stored.
  */
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS strategies (
@@ -49,8 +52,10 @@ CREATE TABLE IF NOT EXISTS strategies (
   rate_strategy CHAR(42) NOT NULL
 );
 
--- Sky side: one row per sUSDS Drip event, with the ssr storage slot read at
--- the same block. chi is the rate accumulator, ssr the per-second rate (ray).
+-- Sky side: one row per SSR CHANGE — File("ssr") events plus one seeded
+-- eth_call row at range start — NOT per Drip (see src/index.ts for why
+-- Drip-per-row was rejected). chi is the rate accumulator read at the same
+-- block, ssr the per-second rate (ray).
 CREATE TABLE IF NOT EXISTS ssr_changes (
   block_number     BIGINT        NOT NULL,
   log_index        INTEGER       NOT NULL,
@@ -140,10 +145,13 @@ CREATE TABLE IF NOT EXISTS pin_snapshots (
 
 -- ── Derived tables (written by the accrual engine, stage 2) ────────────────
 
--- Piecewise-constant segments: one row per interval where position, ssr,
--- rates and utilization are all constant. Boundaries are the union of
--- ssr_changes, reserve_updates and position_events blocks. Continuity
--- (t_end[i] == t_start[i+1], no gaps/overlaps) is reconciliation check #4.
+-- Piecewise segments: one row per interval where the RATE INPUTS (ssr,
+-- liquidity rate, utilization snapshot) are constant. Balances are not
+-- constant within a segment — they drift via index growth; the cost
+-- integral freezes utilization and position at segment start, with error
+-- bounded by the within-segment index growth (measured max ~1.4e-5
+-- relative). Boundaries are the union of ssr_changes, reserve_updates and
+-- position_events blocks; continuity + coverage is reconcile check #4.
 CREATE TABLE IF NOT EXISTS accrual_segments (
   id              BIGSERIAL      PRIMARY KEY,
   strategy_id     INTEGER        NOT NULL REFERENCES strategies(id),

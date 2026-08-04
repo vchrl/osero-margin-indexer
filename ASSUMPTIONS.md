@@ -30,7 +30,7 @@ behind it. Anything the brief leaves unspecified is flagged **ASSUMPTION**.
   (`pin_snapshots`) each accrual run.
 - Stable debt is excluded because it is zero and disabled:
   `stableDebtToken.totalSupply()` (`0xDFf828d767E560cf94E4907b2e60673E772748A4`)
-  returned `0` at block 25,678,276 (2026-08-03), and
+  returned `0` at block 25,678,276 (2026-08-04 UTC), and
   `getReserveConfigurationData(USDS)` returns
   `stableRateBorrowingEnabled = false`.
 - Segments use the snapshot at the **segment start** boundary,
@@ -42,12 +42,12 @@ behind it. Anything the brief leaves unspecified is flagged **ASSUMPTION**.
 - Basis: SSR + 20bps on the **borrowed portion** of deployed USDS:
   `cost_rate(t) = (annualized_SSR(t) + 0.0020) × utilization(t)`, applied to
   the deployed position.
-- **ASSUMPTION — spread compounding**: the brief does not specify the
-  compounding convention for the +20bps. We treat it as a linear annual
-  spread added to the rpow-annualized SSR
-  (`(ssr/1e27)^31,536,000 − 1 + 0.0020`). A per-second-compounded spread
-  would differ by well under 0.1bp at these magnitudes. Stored as data in
-  `strategy_cost_terms`, not hardcoded.
+- **ASSUMPTION — spread convention**: the brief does not specify how the
+  +20bps combines with SSR. Conventions range from a linear annual add
+  (chosen: `(ssr/1e27)^31,536,000 − 1 + 0.0020`) to a multiplicative APY
+  combination (`(1+SSR_apy)(1+0.0020) − 1`). The largest alternative
+  differs by ~0.7bps in rate, ~0.13 USDS over this window. Stored as data
+  in `strategy_cost_terms`, not hardcoded.
 - SSR history is piecewise-constant from sUSDS `File("ssr")` events plus a
   seeded `eth_call` at range start. In the strategy window: ray
   1.000000001121484774769253326 (≈3.60% APY) until block 25,596,101

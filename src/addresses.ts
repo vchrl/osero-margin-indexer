@@ -1,4 +1,4 @@
-// All Ethereum mainnet. Resolved & verified on-chain 2026-08-03 at block 25678103.
+// All Ethereum mainnet. Resolved & verified on-chain 2026-08-04 UTC at block 25678103.
 
 // Osero / allocator side
 export const ALM_PROXY = '0x6d370e359e9cbd0Fd35Bb38fAF705D84238CB884' as const;

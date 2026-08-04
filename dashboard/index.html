@@ -105,7 +105,7 @@
 
 <h1>Is Osero making money?</h1>
 <div class="gate"><span class="dot"></span>
-  data as of block <a href="https://etherscan.io/block/25682695" target="_blank" rel="noopener">25682695</a> · reconcile run 12 · all blocking checks passed
+  data as of block <a href="https://etherscan.io/block/25682695" target="_blank" rel="noopener">25682695</a> · reconcile run 14 · all blocking checks passed
 </div>
 
 <div class="headline">
@@ -173,8 +173,10 @@
   end-of-day position, in bps (left axis). Line: that day's time-weighted
   average utilization (right axis) — the bars are flat because utilization
   and rates have been flat; margin moves only when those inputs move.
-  Segments are split at UTC midnights; within a segment accrual is linear
-  in time, so day attribution is exact under the model. The final day
+  Segments are split at UTC midnights; rates are constant within a segment
+  (balances drift via index growth), the within-segment split is linear in
+  time, and flooring remainders go to each segment's last slice so days sum
+  to segments exactly. The final day
   covers only the hours up to the pinned block and is marked partial —
   its bar is an annualized rate, so it is comparable, just noisier.</p></div></details>
 </section>
@@ -323,8 +325,8 @@ or equivalently SSR must fall below <strong>3.08%</strong> (currently 3.52%).</p
   <details class="method"><summary>Methodology</summary><div class="method-body">
   <p><strong>Data provenance:</strong> pinned block <a href="https://etherscan.io/block/25682695" target="_blank" rel="noopener">25682695</a>
   (hash <code>0xb1f2a257b522a2e23cdd96db09c88a41b2536e7c1161f037cead1eaf8eb7d62a</code>), entry tx <a href="https://etherscan.io/tx/0xff40710593559c22a5a795dd4725a1a12447d350f28564d16fe732ba3d1c19f3" target="_blank" rel="noopener"><code>0xff407105…1c19f3</code></a>,
-  accrual run 11 computed 2026-08-04T16:48:43.296Z,
-  reconcile run 12. The dashboard refuses to render if any
+  accrual run 13 computed 2026-08-04T17:00:53.148Z,
+  reconcile run 14. The dashboard refuses to render if any
   blocking check fails. Latest run:</p>
   <ul><li><span class="good">PASS</span> <code>1_draws_minus_repays_eq_vat_art</code></li><li><span class="good">PASS</span> <code>2_scaled_times_index_eq_balanceOf</code></li><li><span class="good">PASS</span> <code>3_sum_revenue_eq_balance_growth</code></li><li><span class="good">PASS</span> <code>4_segment_continuity_and_coverage</code></li><li><span class="good">PASS</span> <code>5_buffer_balance_eq_net_flow</code></li><li><span class="good">PASS</span> <code>6_stored_addresses_eq_fresh_resolution</code></li><li><span class="good">PASS</span> <code>7_chi_rpow_recomputation</code></li><li><span class="good">PASS</span> <code>8_DIAGNOSTIC_rate_integral_vs_index_revenue</code> <span class="muted">(diagnostic, non-blocking)</span></li><li><span class="good">PASS</span> <code>9_DIAGNOSTIC_utilization_definitions</code> <span class="muted">(diagnostic, non-blocking)</span></li></ul>
   <p>Amounts in USDS (2dp), rates 2dp, margins 1dp bps. Check definitions:
@@ -341,13 +343,13 @@ or equivalently SSR must fall below <strong>3.08%</strong> (currently 3.52%).</p
 <li>Cost attribution uses definition 1: pro-rata attribution of the borrowed amount over supplier claims exactly exhausts total debt (conservation — every borrowed dollar is attributed to exactly one supplier dollar). Definition 2 leaves the treasury-accrual gap unattributed: aToken totalSupply excludes yield accrued to the Spark treasury but not yet minted, so <code>availableLiquidity + debt</code> exceeds it. Measured as of block 25,682,510: gap 67,414 USDS on a ~727M reserve, a utilization difference of 0.0058pp, worth roughly 6 cents of cost over this window. These figures move with the pin; the authoritative current values are the check-9 (<code>9_DIAGNOSTIC_utilization_definitions</code>) row that reconcile writes to <code>ops_reconciliation_runs</code> every run.</li>
 <li>The structural break-even identity (<code>liquidityRate = borrowRate × u × (1 − RF)</code>) uses the rate-model ratio (definition 2), because that is the u the IRS actually prices from; where the dashboard quotes utilization it states which definition it is using.</li>
 <li>Sampling: archive <code>eth_call</code> at every block with a <code>ReserveDataUpdated</code> event (table <code>reserve_snapshots</code>), plus an as-of-pin snapshot (<code>pin_snapshots</code>) each accrual run.</li>
-<li>Stable debt is excluded because it is zero and disabled: <code>stableDebtToken.totalSupply()</code> (<code>0xDFf828d767E560cf94E4907b2e60673E772748A4</code>) returned <code>0</code> at block 25,678,276 (2026-08-03), and <code>getReserveConfigurationData(USDS)</code> returns <code>stableRateBorrowingEnabled = false</code>.</li>
+<li>Stable debt is excluded because it is zero and disabled: <code>stableDebtToken.totalSupply()</code> (<code>0xDFf828d767E560cf94E4907b2e60673E772748A4</code>) returned <code>0</code> at block 25,678,276 (2026-08-04 UTC), and <code>getReserveConfigurationData(USDS)</code> returns <code>stableRateBorrowingEnabled = false</code>.</li>
 <li>Segments use the snapshot at the <strong>segment start</strong> boundary, piecewise-constant until the next boundary — consistent with Aave forward rate semantics (rates set at an update apply until the next update).</li>
 </ul>
 <h3>Cost side (what Osero owes Sky)</h3>
 <ul>
 <li>Basis: SSR + 20bps on the <strong>borrowed portion</strong> of deployed USDS: <code>cost_rate(t) = (annualized_SSR(t) + 0.0020) × utilization(t)</code>, applied to the deployed position.</li>
-<li><strong>ASSUMPTION — spread compounding</strong>: the brief does not specify the compounding convention for the +20bps. We treat it as a linear annual spread added to the rpow-annualized SSR (<code>(ssr/1e27)^31,536,000 − 1 + 0.0020</code>). A per-second-compounded spread would differ by well under 0.1bp at these magnitudes. Stored as data in <code>strategy_cost_terms</code>, not hardcoded.</li>
+<li><strong>ASSUMPTION — spread convention</strong>: the brief does not specify how the +20bps combines with SSR. Conventions range from a linear annual add (chosen: <code>(ssr/1e27)^31,536,000 − 1 + 0.0020</code>) to a multiplicative APY combination (<code>(1+SSR_apy)(1+0.0020) − 1</code>). The largest alternative differs by ~0.7bps in rate, ~0.13 USDS over this window. Stored as data in <code>strategy_cost_terms</code>, not hardcoded.</li>
 <li>SSR history is piecewise-constant from sUSDS <code>File("ssr")</code> events plus a seeded <code>eth_call</code> at range start. In the strategy window: ray 1.000000001121484774769253326 (≈3.60% APY) until block 25,596,101 (2026-07-22), then ray 1.000000001096988989836188433 (≈3.52% APY).</li>
 <li>The on-chain stability fee (jug duty) for ALLOCATOR-PRYSM-A is 0%; the SSR+20bps cost is an off-chain commercial arrangement, which is why it is modeled here rather than read from the chain.</li>
 </ul>
