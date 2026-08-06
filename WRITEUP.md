@@ -1,13 +1,13 @@
 # Writeup: Is Osero making money?
 
 <!-- headline-numbers:start -->
-Answer: **no**. As of pinned block 25683360: current margin ≈ **-27.1 bps**
-annualized; cumulative net **-84.68 USDS** since the 2026-07-24 entry (earned
-636.50 in supply yield, owed 721.18 to Sky) over 11.4 days on the
-1,001,636.50 USDS deployed. Everything below reconciles against chain state at that block.
+Answer: **no**. As of pinned block 25692158: current margin ≈ **-27.1 bps**
+annualized; cumulative net **-93.24 USDS** since the 2026-07-24 entry (earned
+700.90 in supply yield, owed 794.14 to Sky) over 12.6 days on the
+601,700.90 USDS deployed. Everything below reconciles against chain state at that block.
 <!-- headline-numbers:end -->
 
-Historical context: the strategy entered with 1,000,000 USDS on Jul 24, 2026 (block 25,601,435); a second 1,000 USDS draw+supply landed Aug 4, 2026 (block 25,681,464) and was picked up by the pipeline unattended. The loss is structural, not incidental: at the current rate configuration, every borrowed dollar loses money regardless of utilization. Section 6 covers what I would do about it. The [dashboard](dashboard/index.html) refuses to render if any blocking check fails.
+Historical context — the position history in full: supply of 1,000,000 USDS on Jul 24, 2026 (block 25,601,435); a second draw+supply of 1,000 USDS on Aug 4, 2026 (block 25,681,464); a withdrawal of 400,000 USDS from SparkLend on Aug 5, 2026 (block 25,690,834). The second and third movements were picked up by the pipeline unattended. The withdrawn 400,000 USDS sits as plain USDS in the ALM proxy (verified by balanceOf at the pin — exactly 400,000); vat debt is unchanged at 1,001,000. The loss on the deployed portion is structural, not incidental: at the current rate configuration, every borrowed dollar loses money regardless of utilization. Section 6 covers what I would do about it. The [dashboard](dashboard/index.html) refuses to render if any blocking check fails.
 
 ## 1. How I found everything
 
@@ -17,7 +17,7 @@ Starting anchors: the ilk `ALLOCATOR-PRYSM-A` and the ALM proxy `0x6d370e359e9cb
 
 **Step 2, governance history.** Searching vote.sky.money for the ilk dated the lifecycle. The Feb 26, 2026 executive initialized the ilk (line 10M, gap 10M, duty 0%, ttl 24h) with the same vault and buffer addresses the Chainlog carries, which cross-confirmed step 1. The Jul 16, 2026 executive is where the strategy appears: it onboards a Diamond PAU Controller on the Osero instance, authorizes the ALM proxy on the vault and buffer, whitelists it on the LitePSM, onboards "SparkLend USDS (spUSDS)" with rate limits, and cuts the ceiling to 5M with a 1M gap. The accompanying Atlas edit sets maximum exposure at 5,000,000 USDS and a 100% capital ratio requirement. That named the venue before I touched a single transaction.
 
-**Step 3, verify on chain.** Governance text is a claim, not a fact, so I traced the ALM proxy itself. At discovery time it had exactly two transactions (a third — the Aug 4 top-up described below — arrived while this exercise was underway). Deployment on Jun 23, 2026 (block 25,383,064) by the PAUFactory, plus role grants. Then one action on Jul 24, 2026 (block 25,601,435, tx `0xff40710593559c22a5a795dd4725a1a12447d350f28564d16fe732ba3d1c19f3`): in a single atomic transaction the proxy draws 1,000,000 USDS from the AllocatorVault, pulls it from the buffer, approves, and calls `Pool.supply` on SparkLend, receiving 1,000,000 spUSDS minted to itself. The trace confirmed the venue, resolved the spUSDS aToken address, and established the position history at the time of discovery: one entry, no withdrawals. (A second, identical-pattern draw+supply of 1,000 USDS followed on Aug 4, 2026, block 25,681,464, while this exercise was underway — the indexer picked it up in the normal incremental run and reconcile check 1 tracks the vat debt at 1,001,000 exactly.)
+**Step 3, verify on chain.** Governance text is a claim, not a fact, so I traced the ALM proxy itself. At discovery time it had exactly two transactions (two more — the Aug 4 top-up and the Aug 5 withdrawal, described below — arrived while this exercise was underway). Deployment on Jun 23, 2026 (block 25,383,064) by the PAUFactory, plus role grants. Then one action on Jul 24, 2026 (block 25,601,435, tx `0xff40710593559c22a5a795dd4725a1a12447d350f28564d16fe732ba3d1c19f3`): in a single atomic transaction the proxy draws 1,000,000 USDS from the AllocatorVault, pulls it from the buffer, approves, and calls `Pool.supply` on SparkLend, receiving 1,000,000 spUSDS minted to itself. The trace confirmed the venue, resolved the spUSDS aToken address, and established the position history at the time of discovery: one entry, no withdrawals. (Two further movements followed while this exercise was underway, both picked up by normal incremental runs: an identical-pattern draw+supply of 1,000 USDS on Aug 4, 2026, block 25,681,464, tx `0x33383b23409f2c0cb438fec270b85d6c6663cc3a80d6523922c6fa6bc13e4a09`; and a withdrawal of 400,000 USDS on Aug 5, 2026, block 25,690,834, tx `0xf4d1820bb3763d91153f766b677c9c26ed3b1a7905a5613df5b56e374b9917b9`. The withdrawal's transfer trail shows exactly one leg — aToken to ALM proxy — and USDS.balanceOf(proxy) at the pin is exactly 400,000: the funds were not wiped to the vault, not moved to the buffer, and no PSM leg exists. Reconcile check 1 tracks the vat debt at 1,001,000 throughout.)
 
 **Step 4, resolve the venue's own contracts on chain.** I did not trust any remembered or third-party address for the SparkLend periphery. From the Pool: `ADDRESSES_PROVIDER()` then `getPoolDataProvider()` gives the ProtocolDataProvider, and from it `getReserveTokensAddresses(USDS)` and `getInterestRateStrategyAddress(USDS)` give the aToken (matching the trace exactly), the variable debt token, and the rate strategy. The reconcile suite re-runs this resolution every run and compares it to the stored values.
 
@@ -84,20 +84,20 @@ Ten checks (eight blocking, two diagnostic) run after every accrual, write their
 
 <!-- reconciliation-table:start -->
 
-Generated from dashboard/reconciliation.json at reconcile time (run 7, pinned block 25683360):
+Generated from dashboard/reconciliation.json at reconcile time (run 9, pinned block 25692158):
 
 | Check | Kind | Status | Difference | Tolerance |
 |---|---|---|---|---|
 | `1_draws_minus_repays_eq_vat_art` | blocking | pass | 0 | 0 |
 | `2_scaled_times_index_eq_balanceOf` | blocking | pass | 0 | 2 |
-| `3_sum_revenue_eq_balance_growth` | blocking | pass | 189 | 408 |
+| `3_sum_revenue_eq_balance_growth` | blocking | pass | 214 | 459 |
 | `4_segment_continuity_and_coverage` | blocking | pass | 0 | 0 |
 | `5_buffer_balance_eq_net_flow` | blocking | pass | 0 | 0 |
 | `6_stored_addresses_eq_fresh_resolution` | blocking | pass | 0 | 0 |
 | `7_chi_rpow_recomputation` | blocking | pass | 1014 | 10000000000 |
 | `9_DIAGNOSTIC_utilization_definitions` | diagnostic | pass | 0 | diagnostic |
-| `8_DIAGNOSTIC_rate_integral_vs_index_revenue` | diagnostic | pass | 189 | 3182517267006010710 |
-| `10_cost_sql_recomputation` | blocking | pass | 28928992812659 | 20000000000000000 |
+| `8_DIAGNOSTIC_rate_integral_vs_index_revenue` | diagnostic | pass | 215 | 3504503373968656785 |
+| `10_cost_sql_recomputation` | blocking | pass | 31855692480783 | 20000000000000000 |
 
 <!-- reconciliation-table:end -->
 
@@ -109,7 +109,7 @@ This draft itself tripped the same class of error: three addresses transcribed b
 
 ## 6. What the [dashboard](src/dashboard.ts) says, and what I would do
 
-The position is a ~1M pilot against a 5M ceiling (1,001,000 USDS principal after the Aug 4 top-up); the current loss rate and margin are in the generated headline above and on the dashboard. The loss is structural at the current rate configuration: the bracket [borrowRate x (1 - RF) - (SSR + 20bps)] is -0.44%, so every borrowed dollar is underwater and utilization only decides how fast.
+The drawn principal is 1,001,000 USDS against a 5M ceiling; after the Aug 5 withdrawal, ~601.7k of it is deployed in SparkLend and 400,000 sits idle as USDS in the ALM proxy (as of block 25,692,158). The current loss rate and margin on the deployed portion are in the generated headline above and on the dashboard. The loss is structural at the current rate configuration: the bracket [borrowRate x (1 - RF) - (SSR + 20bps)] is -0.44%, so every borrowed dollar is underwater and utilization only decides how fast.
 
 What has to change for the sign to flip (all values as of block 25,683,360; live figures on the dashboard): the SparkLend USDS borrow rate must exceed 4.13% (currently 3.65%), or SSR must fall below 3.08% (currently 3.52%) without SparkLend rates following it down. On the current curve (kink 80%, slope2 15%), utilization sustained above the kink would push the borrow rate through 4.13% quickly; utilization is 62%.
 
@@ -117,8 +117,9 @@ My recommendation, in order:
 
 1. Do not scale the position. The pilot is doing its job, which is producing exactly this measurement. Scaling is worse than linear: adding the remaining ~4M is itself supply-side pressure on the pool. Computed from the stored curve parameters as of block 25,682,695 (kink 80%, slope1 4.709%, RF 10%), +4M moves rate-model utilization from 61.98% to 61.63%, the borrow rate from 3.65% to 3.63%, and the per-unit bracket from -0.44% to -0.46%; the daily loss goes from about 7.4 to about 38.4 USDS/day - worse than the naive 5x (37.1), because the new liquidity dilutes the very rate it earns.
 2. Treat the bracket, not utilization, as the monitored quantity. The pipeline computes it every run; alert when it crosses zero, or set a tolerance band around zero to avoid flapping.
-3. Decide a time limit for the pilot. The bleed is small in absolute terms (roughly 225 USDS per month at the rates prevailing as of block 25,682,695), which is a defensible price for keeping the integration warm and the measurement running, but it should be a conscious line item, not an accident. If the spread has not flipped within an agreed window, wipe the draw back to zero; re-entry later costs one transaction.
-4. If the goal is spread over SSR specifically, this venue is the wrong shape at current rates: SparkLend's USDS supply side is structurally paying less than SSR plus 20 after the reserve factor. Venues where the earn side is not itself downstream of Sky rates would not have the bracket pinned this tightly.
+3. Decide a time limit for the pilot. The bleed is small in absolute terms (roughly 225 USDS per month at the rates prevailing as of block 25,682,695, before the withdrawal shrank the deployed base), which is a defensible price for keeping the integration warm and the measurement running, but it should be a conscious line item, not an accident. If the spread has not flipped within an agreed window, wipe the draw back to zero; re-entry later costs one transaction.
+4. The Aug 5 withdrawal created a third capital state the brief's cost rule prices at zero: as of block 25,692,158, 400,000 USDS of drawn vat debt sits idle in the ALM proxy — not in the venue, so no part of it is borrowed and it accrues no SSR+20bps cost, but it also earns nothing. Dead-weight debt: it neither bleeds nor works, and wiping it back to the vault is one transaction.
+5. If the goal is spread over SSR specifically, this venue is the wrong shape at current rates: SparkLend's USDS supply side is structurally paying less than SSR plus 20 after the reserve factor. Venues where the earn side is not itself downstream of Sky rates would not have the bracket pinned this tightly.
 
 One observation the brief invites: the utilization example in the brief (1M at 50% utilization owes on 500k) is correct for the cost side, but on this venue utilization cannot flip profitability by itself, because the revenue side moves with it. Magnitude yes, sign no. If the intent behind the example was that higher idle liquidity protects the margin, the on-chain rate structure says otherwise.
 
