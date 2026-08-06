@@ -1,7 +1,6 @@
 # osero-margin-indexer
 
-<img width="686" height="622" alt="image" src="https://github.com/user-attachments/assets/d1ebceee-8312-4748-853a-1c1785a838ab" />
-
+<img width="1470" height="748" alt="image" src="https://github.com/user-attachments/assets/6dd28308-7202-4145-a794-affb2b412ee9" />
 
 <!-- headline:start -->
 **Is Osero making money?** As of block 25692158 (reconcile run 9): **NO.**
