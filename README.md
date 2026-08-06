@@ -1,5 +1,8 @@
 # osero-margin-indexer
 
+<img width="686" height="622" alt="image" src="https://github.com/user-attachments/assets/d1ebceee-8312-4748-853a-1c1785a838ab" />
+
+
 <!-- headline:start -->
 **Is Osero making money?** As of block 25692158 (reconcile run 9): **NO.**
 Current margin ≈ **-27.1 bps** annualized; cumulative net **-93.24 USDS**
