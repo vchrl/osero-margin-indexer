@@ -1,7 +1,5 @@
 # osero-margin-indexer
 
-<img width="1470" height="748" alt="image" src="https://github.com/user-attachments/assets/6dd28308-7202-4145-a794-affb2b412ee9" />
-
 <!-- headline:start -->
 **Is Osero making money?** As of block 25692158 (reconcile run 9): **NO.**
 Current margin ≈ **-27.1 bps** annualized; cumulative net **-93.24 USDS**
@@ -16,6 +14,9 @@ The fetcher, reconciliation-gate, and schema patterns are carried over from my
 public sUSDS indexer ([github.com/vchrl/susds-indexer](https://github.com/vchrl/susds-indexer));
 everything Osero-specific — discovery, the accrual model, the P&L engine — is
 new for this exercise.
+
+<img width="1470" height="748" alt="image" src="https://github.com/user-attachments/assets/6dd28308-7202-4145-a794-affb2b412ee9" />
+
 
 ## Reconciliation (the numbers are checked before they are shown)
 
