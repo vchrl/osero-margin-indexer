@@ -1,10 +1,10 @@
 # Writeup: Is Osero making money?
 
 <!-- headline-numbers:start -->
-Answer: **no**. As of pinned block 25692158: current margin ≈ **-27.1 bps**
-annualized; cumulative net **-93.24 USDS** since the 2026-07-24 entry (earned
-700.90 in supply yield, owed 794.14 to Sky) over 12.6 days on the
-601,700.90 USDS deployed. Everything below reconciles against chain state at that block.
+Answer: **no**. As of pinned block 25718335: current margin ≈ **-27.1 bps**
+annualized; cumulative net **-119.44 USDS** since the 2026-07-24 entry (earned
+897.84 in supply yield, owed 1,017.27 to Sky) over 16.3 days on the
+1,001,897.84 USDS deployed. Everything below reconciles against chain state at that block.
 <!-- headline-numbers:end -->
 
 Historical context — the position history in full: supply of 1,000,000 USDS on Jul 24, 2026 (block 25,601,435); a second draw+supply of 1,000 USDS on Aug 4, 2026 (block 25,681,464); a withdrawal of 400,000 USDS from SparkLend on Aug 5, 2026 (block 25,690,834). The second and third movements were picked up by the pipeline unattended. The withdrawn 400,000 USDS sits as plain USDS in the ALM proxy (verified by balanceOf at the pin — exactly 400,000); vat debt is unchanged at 1,001,000. The loss on the deployed portion is structural, not incidental: at the current rate configuration, every borrowed dollar loses money regardless of utilization. Section 6 covers what I would do about it. The [dashboard](dashboard/index.html) refuses to render if any blocking check fails.
@@ -84,20 +84,20 @@ Ten checks (eight blocking, two diagnostic) run after every accrual, write their
 
 <!-- reconciliation-table:start -->
 
-Generated from dashboard/reconciliation.json at reconcile time (run 9, pinned block 25692158):
+Generated from dashboard/reconciliation.json at reconcile time (run 2, pinned block 25718335):
 
 | Check | Kind | Status | Difference | Tolerance |
 |---|---|---|---|---|
 | `1_draws_minus_repays_eq_vat_art` | blocking | pass | 0 | 0 |
-| `2_scaled_times_index_eq_balanceOf` | blocking | pass | 0 | 2 |
-| `3_sum_revenue_eq_balance_growth` | blocking | pass | 214 | 459 |
+| `2_scaled_times_index_eq_balanceOf` | blocking | pass | 1 | 2 |
+| `3_sum_revenue_eq_balance_growth` | blocking | pass | 247 | 528 |
 | `4_segment_continuity_and_coverage` | blocking | pass | 0 | 0 |
 | `5_buffer_balance_eq_net_flow` | blocking | pass | 0 | 0 |
 | `6_stored_addresses_eq_fresh_resolution` | blocking | pass | 0 | 0 |
 | `7_chi_rpow_recomputation` | blocking | pass | 1014 | 10000000000 |
 | `9_DIAGNOSTIC_utilization_definitions` | diagnostic | pass | 0 | diagnostic |
-| `8_DIAGNOSTIC_rate_integral_vs_index_revenue` | diagnostic | pass | 215 | 3504503373968656785 |
-| `10_cost_sql_recomputation` | blocking | pass | 31855692480783 | 20000000000000000 |
+| `8_DIAGNOSTIC_rate_integral_vs_index_revenue` | diagnostic | pass | 248 | 4489180703699264309 |
+| `10_cost_sql_recomputation` | blocking | pass | 40806335823617 | 20000000000000000 |
 
 <!-- reconciliation-table:end -->
 
