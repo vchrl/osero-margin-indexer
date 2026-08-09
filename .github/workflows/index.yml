@@ -89,13 +89,16 @@ jobs:
 
       - name: Commit updated dashboard
         run: |
-          if git diff --quiet -- dashboard/; then
-            echo "Dashboard unchanged; nothing to commit."
+          # reconcile.ts and dashboard.ts also rewrite README.md and
+          # WRITEUP.md, so check and stage the whole tree — leftover
+          # unstaged files make the pull --rebase below abort.
+          if git diff --quiet; then
+            echo "Generated artifacts unchanged; nothing to commit."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add dashboard/
+          git add -A
           git commit -m "Regenerate dashboard from reconciled data"
           git pull --rebase origin main
           git push
