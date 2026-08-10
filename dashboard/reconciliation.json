@@ -1,8 +1,8 @@
 {
-  "run_id": 2,
-  "pinned_block": "25718335",
-  "pinned_block_hash": "0x9a6fe98cb8eca3d8ff3642ae878ed3d8f8e33184b1fdbd673e4d54ac4c3fe248",
-  "generated_at": "2026-08-09T16:00:09.312Z",
+  "run_id": 4,
+  "pinned_block": "25722543",
+  "pinned_block_hash": "0xdd507d2e9456785418e2cb68310c968044964c7ce874cd3190496a2a8e08fbe5",
+  "generated_at": "2026-08-10T05:50:42.660Z",
   "all_blocking_passed": true,
   "checks": [
     {
@@ -18,8 +18,8 @@
       "name": "2_scaled_times_index_eq_balanceOf",
       "status": "pass",
       "blocking": true,
-      "expected": "1001897836140739852862173",
-      "actual": "1001897836140739852862172",
+      "expected": "1001930609563522789438839",
+      "actual": "1001930609563522789438838",
       "difference": "1",
       "tolerance": "2"
     },
@@ -27,17 +27,17 @@
       "name": "3_sum_revenue_eq_balance_growth",
       "status": "pass",
       "blocking": true,
-      "expected": "897836140739852862173",
-      "actual": "897836140739852861926",
-      "difference": "247",
-      "tolerance": "528"
+      "expected": "930609563522789438839",
+      "actual": "930609563522789438583",
+      "difference": "256",
+      "tolerance": "545"
     },
     {
       "name": "4_segment_continuity_and_coverage",
       "status": "pass",
       "blocking": true,
-      "expected": "cover=1784882111..1786289495;gaps=0",
-      "actual": "cover=1784882111..1786289495;gaps=0",
+      "expected": "cover=1784882111..1786340183;gaps=0",
+      "actual": "cover=1784882111..1786340183;gaps=0",
       "difference": "0",
       "tolerance": "0"
     },
@@ -72,8 +72,8 @@
       "name": "9_DIAGNOSTIC_utilization_definitions",
       "status": "pass",
       "blocking": false,
-      "expected": "a_debt_over_atokenSupply=0.619853",
-      "actual": "b_debt_over_availPlusDebt=0.619775;c_rate_implied=0.619774;delta_b_a=-0.000078;delta_c_a=-0.000079;atokenSupply_minus_availPlusDebt_usds=-89821.37",
+      "expected": "a_debt_over_atokenSupply=0.619856",
+      "actual": "b_debt_over_availPlusDebt=0.619776;c_rate_implied=0.619775;delta_b_a=-0.000080;delta_c_a=-0.000081;atokenSupply_minus_availPlusDebt_usds=-92424.24",
       "difference": "0",
       "tolerance": "diagnostic"
     },
@@ -81,18 +81,18 @@
       "name": "8_DIAGNOSTIC_rate_integral_vs_index_revenue",
       "status": "pass",
       "blocking": false,
-      "expected": "897836140739852861926",
-      "actual": "897836140739852862174",
-      "difference": "248",
-      "tolerance": "4489180703699264309"
+      "expected": "930609563522789438583",
+      "actual": "930609563522789438839",
+      "difference": "256",
+      "tolerance": "4653047817613947192"
     },
     {
       "name": "10_cost_sql_recomputation",
       "status": "pass",
       "blocking": true,
-      "expected": "1017273345606712671267",
-      "actual": "1017273386413048494884",
-      "difference": "40806335823617",
+      "expected": "1054406412368288980922",
+      "actual": "1054406454664159941757",
+      "difference": "42295870960835",
       "tolerance": "20000000000000000"
     }
   ]
