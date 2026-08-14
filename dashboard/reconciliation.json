@@ -1,16 +1,16 @@
 {
-  "run_id": 10,
-  "pinned_block": "25744042",
-  "pinned_block_hash": "0x0e19510dc8b13e74a88754f0adf4fa0af24eab2a81e095cc2c0b21984ce4bb92",
-  "generated_at": "2026-08-13T05:52:45.743Z",
+  "run_id": 12,
+  "pinned_block": "25751223",
+  "pinned_block_hash": "0x2379801391cd62b09430801b269e4d7927a3996a6d0e7ec9b6bfb36474f5247f",
+  "generated_at": "2026-08-14T05:51:26.009Z",
   "all_blocking_passed": true,
   "checks": [
     {
       "name": "1_draws_minus_repays_eq_vat_art",
       "status": "pass",
       "blocking": true,
-      "expected": "1001000000000000000000000",
-      "actual": "1001000000000000000000000",
+      "expected": "2001000000000000000000000",
+      "actual": "2001000000000000000000000",
       "difference": "0",
       "tolerance": "0"
     },
@@ -18,26 +18,26 @@
       "name": "2_scaled_times_index_eq_balanceOf",
       "status": "pass",
       "blocking": true,
-      "expected": "1002098218341465663375666",
-      "actual": "1002098218341465663375665",
-      "difference": "1",
+      "expected": "2002182103155781944394476",
+      "actual": "2002182103155781944394476",
+      "difference": "0",
       "tolerance": "2"
     },
     {
       "name": "3_sum_revenue_eq_balance_growth",
       "status": "pass",
       "blocking": true,
-      "expected": "1098218341465663375666",
-      "actual": "1098218341465663375371",
-      "difference": "295",
-      "tolerance": "616"
+      "expected": "1182103155781944394476",
+      "actual": "1182103155781944394155",
+      "difference": "321",
+      "tolerance": "671"
     },
     {
       "name": "4_segment_continuity_and_coverage",
       "status": "pass",
       "blocking": true,
-      "expected": "cover=1784882111..1786599383;gaps=0",
-      "actual": "cover=1784882111..1786599383;gaps=0",
+      "expected": "cover=1784882111..1786685783;gaps=0",
+      "actual": "cover=1784882111..1786685783;gaps=0",
       "difference": "0",
       "tolerance": "0"
     },
@@ -72,8 +72,8 @@
       "name": "9_DIAGNOSTIC_utilization_definitions",
       "status": "pass",
       "blocking": false,
-      "expected": "a_debt_over_atokenSupply=0.619879",
-      "actual": "b_debt_over_availPlusDebt=0.619784;c_rate_implied=0.619784;delta_b_a=-0.000095;delta_c_a=-0.000095;atokenSupply_minus_availPlusDebt_usds=-105490.81",
+      "expected": "a_debt_over_atokenSupply=0.619882",
+      "actual": "b_debt_over_availPlusDebt=0.619787;c_rate_implied=0.619786;delta_b_a=-0.000095;delta_c_a=-0.000096;atokenSupply_minus_availPlusDebt_usds=-109915.70",
       "difference": "0",
       "tolerance": "diagnostic"
     },
@@ -81,18 +81,18 @@
       "name": "8_DIAGNOSTIC_rate_integral_vs_index_revenue",
       "status": "pass",
       "blocking": false,
-      "expected": "1098218341465663375371",
-      "actual": "1098218341465663375667",
-      "difference": "296",
-      "tolerance": "5491091707328316876"
+      "expected": "1182103155781944394155",
+      "actual": "1182103155781944394477",
+      "difference": "322",
+      "tolerance": "5910515778909721970"
     },
     {
       "name": "10_cost_sql_recomputation",
       "status": "pass",
       "blocking": true,
-      "expected": "1244313214619438497856",
-      "actual": "1244313264533125045156",
-      "difference": "49913686547300",
+      "expected": "1339355370995720557386",
+      "actual": "1339355424721875176550",
+      "difference": "53726154619164",
       "tolerance": "20000000000000000"
     }
   ]

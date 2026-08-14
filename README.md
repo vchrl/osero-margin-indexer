@@ -1,10 +1,10 @@
 # osero-margin-indexer
 
 <!-- headline:start -->
-**Is Osero making money?** As of block 25744042 (reconcile run 10): **NO.**
-Current margin ≈ **-27.1 bps** annualized; cumulative net **-146.09 USDS**
-since the 2026-07-24 entry on the 1,002,098.22 USDS position, losing ≈ **$7.35/day**
-over **19.9** days. Structurally: margin per unit deployed =
+**Is Osero making money?** As of block 25751223 (reconcile run 12): **NO.**
+Current margin ≈ **-27.1 bps** annualized; cumulative net **-157.25 USDS**
+since the 2026-07-24 entry on the 2,002,182.10 USDS position, losing ≈ **$7.53/day**
+over **20.9** days. Structurally: margin per unit deployed =
 `u × [borrowRate×(1−RF) − (SSR+20bps)]` = `u × [3.65%×0.90 − 3.72%]` =
 `u × -0.44%` — utilization only scales the loss; the borrow rate must exceed
 ~4.13% (or SSR fall below ~3.08%) to flip the sign.
@@ -27,21 +27,21 @@ makes a silently-missing check a blocking failure, and the latest results are
 committed as [dashboard/reconciliation.json](dashboard/reconciliation.json).
 
 <!-- latest-run-table:start -->
-Latest run (reconcile run 10, pinned block 25744042), generated from
+Latest run (reconcile run 12, pinned block 25751223), generated from
 [dashboard/reconciliation.json](dashboard/reconciliation.json):
 
 | Check | Kind | Status | Difference | Tolerance |
 |---|---|---|---|---|
 | `1_draws_minus_repays_eq_vat_art` | blocking | pass | 0 | 0 |
-| `2_scaled_times_index_eq_balanceOf` | blocking | pass | 1 | 2 |
-| `3_sum_revenue_eq_balance_growth` | blocking | pass | 295 | 616 |
+| `2_scaled_times_index_eq_balanceOf` | blocking | pass | 0 | 2 |
+| `3_sum_revenue_eq_balance_growth` | blocking | pass | 321 | 671 |
 | `4_segment_continuity_and_coverage` | blocking | pass | 0 | 0 |
 | `5_buffer_balance_eq_net_flow` | blocking | pass | 0 | 0 |
 | `6_stored_addresses_eq_fresh_resolution` | blocking | pass | 0 | 0 |
 | `7_chi_rpow_recomputation` | blocking | pass | 1014 | 10000000000 |
 | `9_DIAGNOSTIC_utilization_definitions` | diagnostic | pass | 0 | diagnostic |
-| `8_DIAGNOSTIC_rate_integral_vs_index_revenue` | diagnostic | pass | 296 | 5491091707328316876 |
-| `10_cost_sql_recomputation` | blocking | pass | 49913686547300 | 20000000000000000 |
+| `8_DIAGNOSTIC_rate_integral_vs_index_revenue` | diagnostic | pass | 322 | 5910515778909721970 |
+| `10_cost_sql_recomputation` | blocking | pass | 53726154619164 | 20000000000000000 |
 <!-- latest-run-table:end -->
 
 Checks 2/3 are mathematically dependent (revenue telescopes to the balance
